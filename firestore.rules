@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default open rules for all collections.
+    // This allows read/write access from any client, which is suitable
+    // for prototyping but should be secured before production.
+    match /{path=**} {
+      allow read, write;
+    }
+  }
+}
+
+    

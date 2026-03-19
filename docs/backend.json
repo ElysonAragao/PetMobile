@@ -1,0 +1,329 @@
+{
+  "entities": {
+    "Paciente": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Paciente",
+      "type": "object",
+      "description": "Represents a patient with their personal and health plan information.",
+      "properties": {
+        "codPaciente": {
+          "type": "string",
+          "description": "Unique, app-generated sequential code for the patient (e.g., PAC00001)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the patient."
+        },
+        "endereco": {
+          "type": "string",
+          "description": "Address of the patient."
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Phone number of the patient."
+        },
+        "cpf": {
+          "type": "string",
+          "description": "CPF (Cadastro de Pessoas Físicas) of the patient, used as a unique identifier for lookup."
+        },
+        "healthPlanCode": {
+          "type": "string",
+          "description": "Health plan code of the patient."
+        },
+        "healthPlanName": {
+          "type": "string",
+          "description": "Name of the health plan of the patient."
+        },
+        "matricula": {
+          "type": "string",
+          "description": "Número da matrícula do paciente no plano de saúde."
+        }
+      },
+      "required": [
+        "codPaciente",
+        "name",
+        "endereco",
+        "telefone",
+        "cpf",
+        "healthPlanCode",
+        "healthPlanName",
+        "matricula"
+      ]
+    },
+    "Exame": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Exame",
+      "type": "object",
+      "description": "Represents a type of medical exam.",
+      "properties": {
+        "examCode": {
+          "type": "string",
+          "description": "Code of the exam."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the exam."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the exam."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of the exam, e.g., Lab or Imaging.",
+          "enum": [
+            "Laboratório",
+            "Imagem"
+          ]
+        }
+      },
+      "required": [
+        "examCode",
+        "name",
+        "description",
+        "type"
+      ]
+    },
+    "Medico": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Medico",
+      "type": "object",
+      "description": "Represents a doctor.",
+      "properties": {
+        "codMed": {
+          "type": "string",
+          "description": "Doctor's code."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the doctor."
+        },
+        "crm": {
+          "type": "string",
+          "description": "CRM of the doctor."
+        }
+      },
+      "required": [
+        "codMed",
+        "name",
+        "crm"
+      ]
+    },
+    "Movimentacao": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Movimentacao",
+      "type": "object",
+      "description": "Represents the association between a patient, exams, and a doctor.",
+      "properties": {
+        "movimentoId": {
+          "type": "string",
+          "description": "Unique sequential ID for the movement."
+        },
+        "pacienteId": {
+          "type": "string",
+          "description": "Reference to Paciente."
+        },
+        "exameIds": {
+          "type": "array",
+          "description": "References to Exames.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "medicoId": {
+          "type": "string",
+          "description": "Reference to Medico."
+        },
+        "qrCodeData": {
+          "type": "array",
+          "description": "Data for QR code (or multiple QR codes if needed).",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "movimentoId",
+        "pacienteId",
+        "exameIds",
+        "medicoId"
+      ]
+    },
+    "HealthPlan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HealthPlan",
+      "type": "object",
+      "description": "Represents a health plan/insurance provider.",
+      "properties": {
+        "codPlano": {
+          "type": "string",
+          "description": "The unique code for the health plan."
+        },
+        "nome": {
+          "type": "string",
+          "description": "The name of the health plan."
+        }
+      },
+      "required": [
+        "codPlano",
+        "nome"
+      ]
+    },
+    "Usuario": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Usuario",
+      "type": "object",
+      "description": "Represents a user in the custom access control system.",
+      "properties": {
+        "numUsuario": {
+          "type": "string",
+          "description": "Unique, automatically generated user number (e.g., USR001)."
+        },
+        "nome": {
+          "type": "string",
+          "description": "Name or nickname of the user."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of the user, used for login."
+        },
+        "password": {
+          "type": "string",
+          "description": "User's password (stored as plain text - NOT SECURE)."
+        },
+        "status": {
+          "type": "string",
+          "description": "User status, determines access level.",
+          "enum": [
+            "Administrador",
+            "User"
+          ]
+        },
+        "dataCadastro": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the user was created."
+        },
+        "dataValidade": {
+          "type": "string",
+          "format": "date",
+          "description": "Expiration date for the user's access."
+        }
+      },
+      "required": [
+        "numUsuario",
+        "nome",
+        "email",
+        "password",
+        "status",
+        "dataCadastro",
+        "dataValidade"
+      ]
+    }
+  },
+  "auth": {
+    "providers": []
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/pacientes/{pacienteId}",
+        "definition": {
+          "entityName": "Paciente",
+          "schema": {
+            "$ref": "#/backend/entities/Paciente"
+          },
+          "description": "Stores patient data. The 'pacienteId' is used as the document ID.",
+          "params": [
+            {
+              "name": "pacienteId",
+              "description": "Unique identifier for the patient."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/exames/{exameId}",
+        "definition": {
+          "entityName": "Exame",
+          "schema": {
+            "$ref": "#/backend/entities/Exame"
+          },
+          "description": "Stores exam data. The 'exameId' is used as the document ID.",
+          "params": [
+            {
+              "name": "exameId",
+              "description": "Unique identifier for the exam."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/medicos/{medicoId}",
+        "definition": {
+          "entityName": "Medico",
+          "schema": {
+            "$ref": "#/backend/entities/Medico"
+          },
+          "description": "Stores doctor data. The 'medicoId' is used as the document ID.",
+          "params": [
+            {
+              "name": "medicoId",
+              "description": "Unique identifier for the doctor."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/movimentacoes/{movimentacaoId}",
+        "definition": {
+          "entityName": "Movimentacao",
+          "schema": {
+            "$ref": "#/backend/entities/Movimentacao"
+          },
+          "description": "Stores data about patient movements and associated exams and doctor. Includes 'pacienteId' and 'medicoId' to associate with patient and doctor data.",
+          "params": [
+            {
+              "name": "movimentacaoId",
+              "description": "Unique identifier for the movement record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/planosSaude/{planoId}",
+        "definition": {
+          "entityName": "HealthPlan",
+          "schema": {
+            "$ref": "#/backend/entities/HealthPlan"
+          },
+          "description": "Stores health plan data. The 'planoId' is used as the document ID.",
+          "params": [
+            {
+              "name": "planoId",
+              "description": "Unique identifier for the health plan."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/usuarios/{usuarioId}",
+        "definition": {
+          "entityName": "Usuario",
+          "schema": {
+            "$ref": "#/backend/entities/Usuario"
+          },
+          "description": "Stores custom user data for access control. The document ID is automatically generated by Firestore.",
+          "params": [
+            {
+              "name": "usuarioId",
+              "description": "Unique identifier for the user record."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to support the application's data needs. A separate 'usuarios' collection manages user roles and metadata for a custom access control system, completely independent of Firebase Authentication."
+  }
+}

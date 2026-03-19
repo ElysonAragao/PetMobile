@@ -1,0 +1,434 @@
+
+"use client";
+
+import * as React from 'react';
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, UserCog, Calendar as CalendarIcon, ShieldAlert, LogIn, Undo2 } from 'lucide-react';
+import { format, addYears, parse } from 'date-fns';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+
+import { Usuario } from '@/lib/types';
+import { useUsers, UserFormValues } from '@/hooks/use-user-management';
+import { PageTitle } from '@/components/layout/page-title';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { useToast } from "@/hooks/use-toast";
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useSession } from '@/context/session-context';
+
+const userFormSchema = z.object({
+  nome: z.string().min(1, "Nome é obrigatório"),
+  email: z.string().email("E-mail inválido."),
+  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres."),
+  status: z.enum(['Administrador', 'User'], { required_error: "Status é obrigatório" }),
+  dataValidade: z.date({ required_error: "Data de validade é obrigatória" }),
+});
+
+const editUserSchema = userFormSchema.omit({ password: true }).extend({
+  password: z.string().optional().refine(val => val === "" || !val || val.length >= 6, {
+    message: "A nova senha deve ter no mínimo 6 caracteres.",
+  }),
+});
+
+type SortConfig = {
+  key: keyof Usuario;
+  direction: 'ascending' | 'descending';
+};
+
+function UserList({ users, isLoaded, onEdit, onDelete }: { users: Usuario[], isLoaded: boolean, onEdit: (user: Usuario) => void, onDelete: (id: string) => void }) {
+  const [sortConfig, setSortConfig] = React.useState<SortConfig | null>(null);
+  const { isAdminSetup } = useSession();
+  const router = useRouter();
+
+
+  const sortedUsers = React.useMemo(() => {
+    let sortableItems = [...users];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const valA = a[sortConfig.key] ?? '';
+        const valB = b[sortConfig.key] ?? '';
+        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [users, sortConfig]);
+
+  const requestSort = (key: keyof Usuario) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIndicator = (key: keyof Usuario) => {
+    if (!sortConfig || sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-4 w-4 opacity-30" />;
+    return sortConfig.direction === 'ascending' ? '▲' : '▼';
+  };
+
+  const handleProceedToLogin = () => {
+    // Forçar um reload para que o SessionProvider reavalie isAdminSetup
+    window.location.href = '/login';
+  };
+
+  const getFormattedDate = (dateString: string) => {
+    try {
+      if (!dateString) return 'Inválida';
+      const parsed = parse(dateString, 'yyyy-MM-dd', new Date());
+      // Check if the parsed date is valid
+      if (isNaN(parsed.getTime())) {
+        return 'Inválida';
+      }
+      return format(parsed, 'dd/MM/yyyy');
+    } catch {
+      return 'Inválida';
+    }
+  };
+
+
+  if (!isLoaded) {
+    return <div className="space-y-4">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Usuários Cadastrados</CardTitle>
+        <CardDescription>Visualize e gerencie todos os usuários do sistema.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!isAdminSetup && users.length > 0 && (
+          <Alert className="mb-6 bg-green-50 border-green-200">
+            <LogIn className="h-4 w-4 text-green-700" />
+            <AlertTitle className="text-green-800">Administrador Cadastrado!</AlertTitle>
+            <AlertDescription className="text-green-700">
+              O sistema agora está pronto para ser usado. Clique no botão abaixo para ir para a tela de login.
+            </AlertDescription>
+            <Button onClick={handleProceedToLogin} className="mt-4">
+              Prosseguir para Login
+            </Button>
+          </Alert>
+        )}
+
+        {sortedUsers.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('numUsuario')}>Número{getSortIndicator('numUsuario')}</Button></TableHead>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('nome')}>Nome{getSortIndicator('nome')}</Button></TableHead>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('email')}>Email{getSortIndicator('email')}</Button></TableHead>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</Button></TableHead>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('dataValidade')}>Validade{getSortIndicator('dataValidade')}</Button></TableHead>
+                <TableHead><Button variant="ghost" onClick={() => requestSort('dataCadastro')}>Cadastro{getSortIndicator('dataCadastro')}</Button></TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedUsers.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.numUsuario}</TableCell>
+                  <TableCell className="font-medium">{user.nome}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={user.status === 'Administrador' ? 'default' : 'secondary'}>
+                      {user.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{getFormattedDate(user.dataValidade)}</TableCell>
+                  <TableCell>{format(new Date(user.dataCadastro), 'dd/MM/yyyy HH:mm')}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(user)}><Edit className="h-4 w-4" /><span className="sr-only">Editar</span></Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /><span className="sr-only">Excluir</span></Button></AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isso irá excluir permanentemente o usuário "{user.nome}".</AlertDialogDescription></AlertDialogHeader>
+                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(user.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction></AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="text-center py-12"><UserX className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">Nenhum usuário encontrado</h3><p className="mt-1 text-sm text-muted-foreground">Comece cadastrando um novo usuário na aba "Cadastrar".</p></div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSubmit: (values: any) => Promise<any>, isEditMode?: boolean, initialData?: Partial<Usuario & { dataValidade: Date | string }> }) {
+
+  const form = useForm<z.infer<typeof userFormSchema>>({
+    resolver: zodResolver(isEditMode ? editUserSchema : userFormSchema) as any,
+    defaultValues: { nome: "", email: "", password: "", status: "User", dataValidade: addYears(new Date(), 1) },
+  });
+
+  const status = form.watch('status');
+
+  React.useEffect(() => {
+    if (status === 'Administrador') {
+      form.setValue('dataValidade', addYears(new Date(), 100));
+    } else if (status === 'User' && !isEditMode) {
+      // Only reset to 1 year for new users, not during editing
+      form.setValue('dataValidade', addYears(new Date(), 1));
+    }
+  }, [status, form, isEditMode]);
+
+
+  React.useEffect(() => {
+    if (isEditMode && initialData) {
+      let parsedDate = new Date(); // Default fallback
+      if (initialData.dataValidade && typeof initialData.dataValidade === 'string') {
+        try {
+          const parsed = parse(initialData.dataValidade, 'yyyy-MM-dd', new Date());
+          if (!isNaN(parsed.getTime())) {
+            parsedDate = parsed;
+          }
+        } catch (e) {
+          // Fallback to `new Date()` is already set
+        }
+      } else if ((initialData.dataValidade as unknown) instanceof Date) {
+        // If it's already a date, use it directly
+        parsedDate = initialData.dataValidade as unknown as Date;
+      }
+
+      form.reset({
+        nome: initialData.nome,
+        status: initialData.status,
+        dataValidade: parsedDate,
+        email: initialData.email
+      });
+    } else {
+      form.reset({
+        nome: "", email: "", password: "", status: "User", dataValidade: addYears(new Date(), 1)
+      })
+    }
+  }, [initialData, isEditMode, form]);
+
+  async function onSubmit(values: z.infer<typeof userFormSchema | typeof editUserSchema>) {
+    await onFormSubmit(values);
+    if (!isEditMode) {
+      form.reset({ nome: "", email: "", password: "", status: "User", dataValidade: addYears(new Date(), 1) });
+    }
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Aviso de Segurança</AlertTitle>
+          <AlertDescription>
+            As senhas são salvas como texto simples no banco de dados. Esta abordagem não é segura para produção.
+          </AlertDescription>
+        </Alert>
+        <FormField
+          control={form.control}
+          name="nome"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Nome ou Apelido</FormLabel>
+              <FormControl><Input placeholder="Ex: João Silva" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>E-mail</FormLabel>
+                <FormControl><Input placeholder="usuario@email.com" {...field} disabled={isEditMode} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{isEditMode ? "Nova Senha (opcional)" : "Senha"}</FormLabel>
+                <FormControl><Input type="password" {...field} placeholder={isEditMode ? "Deixe em branco para não alterar" : "******"} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="Administrador">Administrador (Validade Ilimitada)</SelectItem>
+                    <SelectItem value="User">User</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="dataValidade"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Data de Validade</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={status === 'Administrador'}>
+                        {field.value ? format(field.value, "PPP") : <span>Escolha uma data</span>}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date() && date.toDateString() !== new Date().toDateString()} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? 'Salvando...' : (<>{isEditMode ? 'Salvar Alterações' : 'Cadastrar Usuário'}</>)}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+export default function UsersPage() {
+  const { users, addUser, updateUser, deleteUser, isLoaded, error } = useUsers();
+  const [activeTab, setActiveTab] = React.useState("list");
+  const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+  const [selectedUser, setSelectedUser] = React.useState<Usuario | null>(null);
+  const { toast } = useToast();
+  const tabsListRef = React.useRef<HTMLDivElement>(null);
+  const { isAdminSetup } = useSession();
+
+  React.useEffect(() => {
+    // Se não há admin, força a abertura da aba de cadastro
+    if (!isAdminSetup) {
+      setActiveTab('register');
+    }
+  }, [isAdminSetup]);
+
+  const handleUserAdded = () => {
+    if (isAdminSetup) {
+      setActiveTab("list");
+      setTimeout(() => { tabsListRef.current?.focus(); }, 0);
+    }
+    // No modo de setup, o usuário permanecerá na aba de listagem para ver o botão de login
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    toast({ title: "Aguarde", description: "Excluindo usuário..." });
+    const result = await deleteUser(id);
+    if (result.success) {
+      toast({ title: "Usuário Excluído", description: "O registro do usuário foi removido." });
+    } else {
+      toast({ title: "Erro", description: result.message, variant: "destructive" });
+    }
+  };
+
+  const handleOpenEditDialog = (user: Usuario) => {
+    setSelectedUser(user);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleAddUser = async (values: z.infer<typeof userFormSchema>) => {
+    toast({ title: "Aguarde", description: "Criando novo usuário..." });
+    const result = await addUser(values);
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Usuário cadastrado com sucesso." });
+      handleUserAdded();
+    } else {
+      toast({ title: "Erro", description: result.message, variant: "destructive" });
+    }
+  };
+
+  const handleUpdateUser = async (values: z.infer<typeof editUserSchema>) => {
+    if (!selectedUser) return;
+    const result = await updateUser(selectedUser.id, values);
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Usuário atualizado com sucesso." });
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+    } else {
+      toast({ title: "Erro", description: result.message, variant: "destructive" });
+    }
+  };
+
+  if (error) return <div className="text-red-500">Erro ao carregar usuários: {error.message}</div>;
+
+  return (
+    <>
+      <PageTitle
+        title={!isAdminSetup ? "Configuração Inicial" : "Gerenciamento de Usuários"}
+        description={!isAdminSetup ? "Cadastre o primeiro usuário Administrador para iniciar o sistema." : "Adicione, visualize e gerencie os usuários do sistema."}
+      >
+        {isAdminSetup && (
+          <Link href="/" passHref>
+            <Button variant="outline">
+              <Undo2 className="mr-2 h-4 w-4" />
+              Voltar ao Menu
+            </Button>
+          </Link>
+        )}
+      </PageTitle>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList ref={tabsListRef} className="grid w-full grid-cols-2 md:w-[400px]">
+          <TabsTrigger value="list" disabled={!isAdminSetup}><UserCog className="mr-2 h-4 w-4" />Listar Usuários</TabsTrigger>
+          <TabsTrigger value="register"><PlusCircle className="mr-2 h-4 w-4" />Cadastrar</TabsTrigger>
+        </TabsList>
+        <TabsContent value="list" className="mt-6">
+          <UserList users={users} isLoaded={isLoaded} onEdit={handleOpenEditDialog} onDelete={handleDeleteUser} />
+        </TabsContent>
+        <TabsContent value="register" className="mt-6">
+          <Card>
+            <CardHeader><CardTitle>Novo Usuário</CardTitle><CardDescription>Preencha os campos abaixo para registrar um novo usuário no sistema.</CardDescription></CardHeader>
+            <CardContent><UserForm onFormSubmit={handleAddUser} /></CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => { if (!isOpen) setSelectedUser(null); setIsEditDialogOpen(isOpen); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Usuário</DialogTitle><DialogDescription>Modifique os dados do usuário abaixo. O e-mail não pode ser alterado.</DialogDescription></DialogHeader>
+          <UserForm onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

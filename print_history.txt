@@ -1,0 +1,907 @@
+﻿commit 6a51c362e18ca30c4524db7219a3a2d7fdcef973
+Author: ElysonAragao <elysonaragao@gmail.com>
+Date:   Tue Mar 3 10:46:25 2026 -0300
+
+    Backup completo antes do planejamento de Multi-tenancy
+
+diff --git a/src/app/print/[data]/page.tsx b/src/app/print/[data]/page.tsx
+index 7227c59..5791661 100644
+--- a/src/app/print/[data]/page.tsx
++++ b/src/app/print/[data]/page.tsx
+@@ -1,8 +1,9 @@
+ "use client";
+ import * as React from 'react';
+ import { useParams, useSearchParams } from 'next/navigation';
+-import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
++import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+ import { useFirestore } from '@/firebase';
++import { createClient } from '@/lib/supabase/client';
+ import { Beaker, Loader2, AlertTriangle, Printer, Info } from 'lucide-react';
+ 
+ import { Button } from '@/components/ui/button';
+@@ -24,6 +25,7 @@ function PrintLayout() {
+     const params = useParams();
+     const searchParams = useSearchParams();
+     const firestore = useFirestore();
++    const supabase = createClient();
+     const movimentoId = params.data as string;
+ 
+     // Suporte para modo leitura
+@@ -47,6 +49,12 @@ function PrintLayout() {
+                     throw new Error("Conex├úo com banco de dados n├úo estabelecida.");
+                 }
+ 
++                // Force session load to ensure RLS policies pass in this new tab
++                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
++                if (!session) {
++                    console.warn("Nenhuma sess├úo ativa encontrada. O acesso pode ser negado pela RLS.");
++                }
++
+                 const movQuery = query(collection(firestore, 'movimentacoes'), where('movimentoId', '==', movimentoId), limit(1));
+                 const movSnapshot = await getDocs(movQuery);
+ 
+@@ -59,19 +67,35 @@ function PrintLayout() {
+ 
+                 const { pacienteId, medicoId, exameIds, movimentoId: fetchedMovimentoId, data: fetchedData } = movData;
+ 
+-                const patientDoc = await getDoc(doc(firestore, 'pacientes', pacienteId));
+-                if (!patientDoc.exists()) throw new Error("Paciente n├úo encontrado.");
+-                const patientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
++                console.log("Movimentacao fetched from Firestore:", { pacienteId, medicoId, exameIds, fetchedMovimentoId });
+ 
+-                const medicoDoc = await getDoc(doc(firestore, 'medicos', medicoId));
+-                if (!medicoDoc.exists()) throw new Error("M├®dico n├úo encontrado.");
+-                const medicoData = { id: medicoDoc.id, ...medicoDoc.data() } as Medico;
+-
+-                const examsData: Exam[] = [];
+-                for (const examId of exameIds) {
+-                    const examDoc = await getDoc(doc(firestore, 'exames', examId));
+-                    if (examDoc.exists()) {
+-                        examsData.push({ id: examDoc.id, ...examDoc.data() } as Exam);
++                const { data: patientDataSB, error: patientError } = await supabase
++                    .from('patients')
++                    .select('id, name, cpf, telefone, email, endereco, matricula, codPaciente:cod_paciente, healthPlanCode:health_plan_code, healthPlanName:health_plan_name')
++                    .eq('id', pacienteId)
++                    .single();
++                if (patientError || !patientDataSB) {
++                    console.error("Erro ao buscar paciente no Supabase:", patientError, "pacienteId:", pacienteId);
++                    throw new Error("Paciente n├úo encontrado.");
++                }
++                const patientData = patientDataSB as unknown as Patient;
++
++                const { data: medicoDataSB, error: medicoError } = await supabase
++                    .from('medicos')
++                    .select('id, name, crm, telefone:phone, codMed:cod_med')
++                    .eq('id', medicoId)
++                    .single();
++                if (medicoError || !medicoDataSB) throw new Error("M├®dico n├úo encontrado.");
++                const medicoData = medicoDataSB as unknown as Medico;
++
++                let examsData: Exam[] = [];
++                if (exameIds && exameIds.length > 0) {
++                    const { data: examsDataSB, error: examsError } = await supabase
++                        .from('exams')
++                        .select('id, name, description, type, examCode:code, idExame:code')
++                        .in('id', exameIds);
++                    if (!examsError && examsDataSB) {
++                        examsData = examsDataSB as unknown as Exam[];
+                     }
+                 }
+ 
+
+commit 1b32d9e22899b756f43920f9cd39f4a0cf1b682b
+Author: ElysonAragao <elysonaragao@gmail.com>
+Date:   Mon Feb 23 12:35:18 2026 -0300
+
+    feat: novos campos (email, idExame, telefone, idPlano), filtro de exames, botao nova leitura
+
+diff --git a/src/app/print/[data]/page.tsx b/src/app/print/[data]/page.tsx
+index e7270ad..7227c59 100644
+--- a/src/app/print/[data]/page.tsx
++++ b/src/app/print/[data]/page.tsx
+@@ -1,11 +1,10 @@
+ "use client";
+ import * as React from 'react';
+-import { useParams } from 'next/navigation';
++import { useParams, useSearchParams } from 'next/navigation';
+ import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+ import { useFirestore } from '@/firebase';
+ import { Beaker, Loader2, AlertTriangle, Printer, Info } from 'lucide-react';
+ 
+-
+ import { Button } from '@/components/ui/button';
+ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+ import { Patient, Medico, Exam, Movimentacao } from '@/lib/types';
+@@ -23,9 +22,18 @@ interface GuiaCompleta {
+ 
+ function PrintLayout() {
+     const params = useParams();
++    const searchParams = useSearchParams();
+     const firestore = useFirestore();
+     const movimentoId = params.data as string;
+ 
++    // Suporte para modo leitura
++    const tipo = searchParams.get('tipo'); // 'leitura' or null (movimenta├º├úo)
++    const codLeitura = searchParams.get('codLeitura');
++    const dataLeitura = searchParams.get('dataLeitura');
++
++    const isLeitura = tipo === 'leitura';
++    const titulo = isLeitura ? 'Relat├│rio de Leitura' : 'Guia de Solicita├º├úo M├®dica';
++
+     const [guia, setGuia] = React.useState<GuiaCompleta | null>(null);
+     const [error, setError] = React.useState<string | null>(null);
+     const [isLoading, setIsLoading] = React.useState(true);
+@@ -132,6 +140,11 @@ function PrintLayout() {
+ 
+     if (!guia) return null;
+ 
++    // Dividir exames em colunas (2 colunas)
++    const midPoint = Math.ceil(guia.exams.length / 2);
++    const examsCol1 = guia.exams.slice(0, midPoint);
++    const examsCol2 = guia.exams.slice(midPoint);
++
+     return (
+         <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
+             <header className="flex justify-between items-center mb-4 no-print">
+@@ -151,37 +164,48 @@ function PrintLayout() {
+                     <Info className="h-4 w-4" />
+                     <AlertTitle>Como Salvar ou Enviar a Guia?</AlertTitle>
+                     <AlertDescription>
+-                        Ap├│s clicar em "Gerar PDF / Imprimir", na janela de impress├úo do seu navegador, escolha o destino **"Salvar como PDF"**. Depois de salvo, voc├¬ poder├í anexar o arquivo em um e-mail ou envi├í-lo pelo WhatsApp.
++                        Ap├│s clicar em &quot;Gerar PDF / Imprimir&quot;, na janela de impress├úo do seu navegador, escolha o destino <strong>&quot;Salvar como PDF&quot;</strong>. Depois de salvo, voc├¬ poder├í anexar o arquivo em um e-mail ou envi├í-lo pelo WhatsApp.
+                     </AlertDescription>
+                 </Alert>
+             </div>
+ 
+-            <h1 className="text-center text-2xl font-bold mb-4">Guia de Solicita├º├úo M├®dica</h1>
+-
+-            <section className="flex justify-between items-center mb-6 text-sm">
+-                <div><strong>Data do Pedido:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</div>
++            {/* T├¡tulo do documento */}
++            <h1 className="text-center text-2xl font-bold mb-4">{titulo}</h1>
++
++            {/* Cabe├ºalho com informa├º├Áes */}
++            <section className="flex justify-between items-center mb-4 text-sm">
++                <div>
++                    {isLeitura && codLeitura && (
++                        <><strong>C├│digo Leitura:</strong> {codLeitura} &nbsp;|&nbsp; </>
++                    )}
++                    {isLeitura && dataLeitura && (
++                        <><strong>Data Leitura:</strong> {new Date(dataLeitura).toLocaleString('pt-BR')}</>
++                    )}
++                    {!isLeitura && (
++                        <><strong>Data do Pedido:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</>
++                    )}
++                </div>
+                 <div><strong>Movimenta├º├úo:</strong> {guia.movimentoId}</div>
+             </section>
+ 
+-            <section className="mb-6 text-base border-t border-b border-black py-3">
++            {/* Dados do Paciente e M├®dico */}
++            <section className="mb-4 text-base border-t border-b border-black py-3">
+                 <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+-                    {/* Linha 1 */}
+                     <p className="col-span-1"><strong>Nome:</strong> {guia.patient.name}</p>
+                     <p className="col-span-1"><strong>CPF:</strong> {guia.patient.cpf}</p>
+                     <p className="col-span-1"><strong>Telefone:</strong> {guia.patient.telefone}</p>
+ 
+-                    {/* Linha 2 */}
+                     <p className="col-span-1"><strong>ID Plano:</strong> {guia.patient.healthPlanCode}</p>
+                     <p className="col-span-1"><strong>Plano:</strong> {guia.patient.healthPlanName}</p>
+                     <p className="col-span-1"><strong>Matr├¡cula:</strong> {guia.patient.matricula || 'N/A'}</p>
+ 
+-                    {/* Linha 3 */}
+                     <p className="col-span-2"><strong>M├®dico(a):</strong> Dr(a). {guia.medico.name}</p>
+                     <p className="col-span-1"><strong>CRM:</strong> {guia.medico.crm}</p>
+                 </div>
+             </section>
+ 
+-            <section className="flex flex-col items-center justify-center my-8">
++            {/* QR Code - posi├º├úo fixa, antes dos exames */}
++            <section className="flex flex-col items-center justify-center my-6">
+                 {/* eslint-disable-next-line @next/next/no-img-element */}
+                 <img
+                     src={`https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(guia.movimentoId)}`}
+@@ -191,17 +215,46 @@ function PrintLayout() {
+                 />
+             </section>
+ 
++            {/* Exames em 2 colunas */}
+             <section>
+-                <h2 className="text-xl font-bold mb-3 flex items-center gap-2"><Beaker size={22} /> Exames Solicitados</h2>
+-                <div className="space-y-2 text-lg">
+-                    {guia.exams.map(exam => (
+-                        <p key={exam.id}>
+-                            <strong>{exam.examCode}</strong> - {exam.name}
+-                        </p>
+-                    ))}
++                <h2 className="text-xl font-bold mb-3 flex items-center gap-2 border-t border-black pt-3">
++                    <Beaker size={22} /> Exames Solicitados ({guia.exams.length})
++                </h2>
++                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
++                    <div className="space-y-2">
++                        {examsCol1.map(exam => (
++                            <div key={exam.id}>
++                                <p className="text-base">
++                                    ÔÇó <strong>{exam.idExame || exam.examCode}</strong> - {exam.name}
++                                </p>
++                                {!isLeitura && exam.description && (
++                                    <p className="text-sm text-gray-600 ml-4">{exam.description}</p>
++                                )}
++                            </div>
++                        ))}
++                    </div>
++                    <div className="space-y-2">
++                        {examsCol2.map(exam => (
++                            <div key={exam.id}>
++                                <p className="text-base">
++                                    ÔÇó <strong>{exam.idExame || exam.examCode}</strong> - {exam.name}
++                                </p>
++                                {!isLeitura && exam.description && (
++                                    <p className="text-sm text-gray-600 ml-4">{exam.description}</p>
++                                )}
++                            </div>
++                        ))}
++                    </div>
+                 </div>
+             </section>
+ 
++            {/* Data de movimenta├º├úo no rodap├® para leitura */}
++            {isLeitura && (
++                <section className="mt-6 pt-3 border-t border-black text-sm text-center text-gray-600">
++                    <p><strong>Data da Movimenta├º├úo Original:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</p>
++                </section>
++            )}
++
+             <style jsx global>{`
+           @media print {
+             .no-print {
+@@ -231,7 +284,7 @@ function PrintLayout() {
+              .print-container .text-sm {
+                 font-size: 11pt !important;
+              }
+-             .print-container .text-lg {
++             .print-container .text-base {
+                 font-size: 12pt !important;
+              }
+           }
+
+commit 5dc16f803df96ad15060c5e2e8ad021c6ce46432
+Author: ElysonAragao <elysonaragao@gmail.com>
+Date:   Sun Feb 22 09:36:49 2026 -0300
+
+    fix: trocar next/image por img nativo para QR codes (corrige imagem quebrada no Vercel)
+
+diff --git a/src/app/print/[data]/page.tsx b/src/app/print/[data]/page.tsx
+index 82c7906..e7270ad 100644
+--- a/src/app/print/[data]/page.tsx
++++ b/src/app/print/[data]/page.tsx
+@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
+ import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+ import { useFirestore } from '@/firebase';
+ import { Beaker, Loader2, AlertTriangle, Printer, Info } from 'lucide-react';
+-import Image from 'next/image';
++
+ 
+ import { Button } from '@/components/ui/button';
+ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+@@ -22,186 +22,187 @@ interface GuiaCompleta {
+ 
+ 
+ function PrintLayout() {
+-  const params = useParams();
+-  const firestore = useFirestore();
+-  const movimentoId = params.data as string;
+-  
+-  const [guia, setGuia] = React.useState<GuiaCompleta | null>(null);
+-  const [error, setError] = React.useState<string | null>(null);
+-  const [isLoading, setIsLoading] = React.useState(true);
+-
+-  React.useEffect(() => {
+-    const fetchGuia = async () => {
+-        setIsLoading(true);
+-        setError(null);
+-        try {
+-            if (!firestore) {
+-                throw new Error("Conex├úo com banco de dados n├úo estabelecida.");
+-            }
++    const params = useParams();
++    const firestore = useFirestore();
++    const movimentoId = params.data as string;
++
++    const [guia, setGuia] = React.useState<GuiaCompleta | null>(null);
++    const [error, setError] = React.useState<string | null>(null);
++    const [isLoading, setIsLoading] = React.useState(true);
++
++    React.useEffect(() => {
++        const fetchGuia = async () => {
++            setIsLoading(true);
++            setError(null);
++            try {
++                if (!firestore) {
++                    throw new Error("Conex├úo com banco de dados n├úo estabelecida.");
++                }
+ 
+-            const movQuery = query(collection(firestore, 'movimentacoes'), where('movimentoId', '==', movimentoId), limit(1));
+-            const movSnapshot = await getDocs(movQuery);
++                const movQuery = query(collection(firestore, 'movimentacoes'), where('movimentoId', '==', movimentoId), limit(1));
++                const movSnapshot = await getDocs(movQuery);
+ 
+-            if (movSnapshot.empty) {
+-                throw new Error("Guia de movimenta├º├úo n├úo encontrada.");
+-            }
+-            
+-            const movDoc = movSnapshot.docs[0];
+-            const movData = movDoc.data() as Movimentacao;
+-
+-            const { pacienteId, medicoId, exameIds, movimentoId: fetchedMovimentoId, data: fetchedData } = movData;
+-
+-            const patientDoc = await getDoc(doc(firestore, 'pacientes', pacienteId));
+-            if (!patientDoc.exists()) throw new Error("Paciente n├úo encontrado.");
+-            const patientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
+-
+-            const medicoDoc = await getDoc(doc(firestore, 'medicos', medicoId));
+-            if (!medicoDoc.exists()) throw new Error("M├®dico n├úo encontrado.");
+-            const medicoData = { id: medicoDoc.id, ...medicoDoc.data() } as Medico;
+-            
+-            const examsData: Exam[] = [];
+-            for (const examId of exameIds) {
+-                const examDoc = await getDoc(doc(firestore, 'exames', examId));
+-                if (examDoc.exists()) {
+-                    examsData.push({ id: examDoc.id, ...examDoc.data() } as Exam);
++                if (movSnapshot.empty) {
++                    throw new Error("Guia de movimenta├º├úo n├úo encontrada.");
+                 }
++
++                const movDoc = movSnapshot.docs[0];
++                const movData = movDoc.data() as Movimentacao;
++
++                const { pacienteId, medicoId, exameIds, movimentoId: fetchedMovimentoId, data: fetchedData } = movData;
++
++                const patientDoc = await getDoc(doc(firestore, 'pacientes', pacienteId));
++                if (!patientDoc.exists()) throw new Error("Paciente n├úo encontrado.");
++                const patientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
++
++                const medicoDoc = await getDoc(doc(firestore, 'medicos', medicoId));
++                if (!medicoDoc.exists()) throw new Error("M├®dico n├úo encontrado.");
++                const medicoData = { id: medicoDoc.id, ...medicoDoc.data() } as Medico;
++
++                const examsData: Exam[] = [];
++                for (const examId of exameIds) {
++                    const examDoc = await getDoc(doc(firestore, 'exames', examId));
++                    if (examDoc.exists()) {
++                        examsData.push({ id: examDoc.id, ...examDoc.data() } as Exam);
++                    }
++                }
++
++                if (examsData.length !== exameIds.length) {
++                    console.warn("Alguns exames solicitados n├úo foram encontrados.");
++                }
++
++                setGuia({
++                    movimentoId: fetchedMovimentoId,
++                    data: fetchedData,
++                    patient: patientData,
++                    medico: medicoData,
++                    exams: examsData
++                });
++
++            } catch (e: any) {
++                setError(e.message || "Ocorreu um erro ao buscar os dados da guia.");
++                console.error(e);
++            } finally {
++                setIsLoading(false);
+             }
+-            
+-            if (examsData.length !== exameIds.length) {
+-                console.warn("Alguns exames solicitados n├úo foram encontrados.");
+-            }
++        }
+ 
+-            setGuia({
+-                movimentoId: fetchedMovimentoId,
+-                data: fetchedData,
+-                patient: patientData,
+-                medico: medicoData,
+-                exams: examsData
+-            });
+-
+-        } catch (e: any) {
+-            setError(e.message || "Ocorreu um erro ao buscar os dados da guia.");
+-            console.error(e);
+-        } finally {
++        if (movimentoId && firestore) {
++            fetchGuia();
++        } else if (!movimentoId) {
++            setError("Nenhuma guia especificada.");
+             setIsLoading(false);
+         }
++    }, [movimentoId, firestore]);
++
++    const handlePrint = () => {
++        window.print();
+     }
+-    
+-    if (movimentoId && firestore) {
+-      fetchGuia();
+-    } else if (!movimentoId) {
+-      setError("Nenhuma guia especificada.");
+-      setIsLoading(false);
+-    }
+-  }, [movimentoId, firestore]);
+-  
+-  const handlePrint = () => {
+-    window.print();
+-  }
+ 
+ 
+-  if (isLoading) {
+-    return (
+-        <div className="flex items-center justify-center min-h-screen bg-gray-50 no-print">
+-            <div className="flex flex-col items-center gap-4">
+-                <Loader2 className="w-12 h-12 animate-spin text-primary"/>
+-                <p className="text-lg text-muted-foreground">Carregando dados da guia...</p>
++    if (isLoading) {
++        return (
++            <div className="flex items-center justify-center min-h-screen bg-gray-50 no-print">
++                <div className="flex flex-col items-center gap-4">
++                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
++                    <p className="text-lg text-muted-foreground">Carregando dados da guia...</p>
++                </div>
+             </div>
+-        </div>
+-    )
+-  }
++        )
++    }
+ 
+-  if (error) {
+-    return (
+-      <div className="flex items-center justify-center min-h-screen bg-gray-100 no-print">
+-        <Card className="w-full max-w-lg text-center shadow-lg">
+-            <CardHeader>
+-                <CardTitle className="flex flex-col items-center justify-center gap-2">
+-                    <AlertTriangle className="w-10 h-10 text-destructive"/>
+-                    <span className="mt-2 text-xl">Erro ao Carregar Dados</span>
+-                </CardTitle>
+-            </CardHeader>
+-            <CardContent>
+-                <p className="p-3 rounded-md bg-destructive/90 text-destructive-foreground">{error}</p>
+-                <p className="mt-4 text-sm text-muted-foreground">Por favor, volte e tente gerar a guia novamente ou verifique o link.</p>
+-            </CardContent>
+-        </Card>
+-      </div>
+-    )
+-  }
+-
+-  if (!guia) return null;
+-
+-  return (
+-    <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
+-        <header className="flex justify-between items-center mb-4 no-print">
+-            <h1 className="text-xl font-bold text-primary">PacienteMobile</h1>
+-            <div className="flex gap-2">
+-                <Button onClick={handlePrint} className="font-bold text-base">
+-                    <Printer className="mr-2"/> Gerar PDF / Imprimir
+-                </Button>
+-                <Button onClick={() => window.close()} className="font-bold text-base" variant="outline">
+-                    FECHAR
+-                </Button>
+-            </div>
+-        </header>
+-
+-        <div className="no-print my-6">
+-             <Alert variant="default" className="text-left">
+-                <Info className="h-4 w-4" />
+-                <AlertTitle>Como Salvar ou Enviar a Guia?</AlertTitle>
+-                <AlertDescription>
+-                Ap├│s clicar em "Gerar PDF / Imprimir", na janela de impress├úo do seu navegador, escolha o destino **"Salvar como PDF"**. Depois de salvo, voc├¬ poder├í anexar o arquivo em um e-mail ou envi├í-lo pelo WhatsApp.
+-                </AlertDescription>
+-            </Alert>
+-        </div>
+-        
+-        <h1 className="text-center text-2xl font-bold mb-4">Guia de Solicita├º├úo M├®dica</h1>
+-        
+-        <section className="flex justify-between items-center mb-6 text-sm">
+-            <div><strong>Data do Pedido:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</div>
+-            <div><strong>Movimenta├º├úo:</strong> {guia.movimentoId}</div>
+-        </section>
+-
+-        <section className="mb-6 text-base border-t border-b border-black py-3">
+-            <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+-                {/* Linha 1 */}
+-                <p className="col-span-1"><strong>Nome:</strong> {guia.patient.name}</p>
+-                <p className="col-span-1"><strong>CPF:</strong> {guia.patient.cpf}</p>
+-                <p className="col-span-1"><strong>Telefone:</strong> {guia.patient.telefone}</p>
+-
+-                {/* Linha 2 */}
+-                <p className="col-span-1"><strong>ID Plano:</strong> {guia.patient.healthPlanCode}</p>
+-                <p className="col-span-1"><strong>Plano:</strong> {guia.patient.healthPlanName}</p>
+-                <p className="col-span-1"><strong>Matr├¡cula:</strong> {guia.patient.matricula || 'N/A'}</p>
+-                
+-                {/* Linha 3 */}
+-                <p className="col-span-2"><strong>M├®dico(a):</strong> Dr(a). {guia.medico.name}</p>
+-                <p className="col-span-1"><strong>CRM:</strong> {guia.medico.crm}</p>
++    if (error) {
++        return (
++            <div className="flex items-center justify-center min-h-screen bg-gray-100 no-print">
++                <Card className="w-full max-w-lg text-center shadow-lg">
++                    <CardHeader>
++                        <CardTitle className="flex flex-col items-center justify-center gap-2">
++                            <AlertTriangle className="w-10 h-10 text-destructive" />
++                            <span className="mt-2 text-xl">Erro ao Carregar Dados</span>
++                        </CardTitle>
++                    </CardHeader>
++                    <CardContent>
++                        <p className="p-3 rounded-md bg-destructive/90 text-destructive-foreground">{error}</p>
++                        <p className="mt-4 text-sm text-muted-foreground">Por favor, volte e tente gerar a guia novamente ou verifique o link.</p>
++                    </CardContent>
++                </Card>
+             </div>
+-        </section>
+-        
+-        <section className="flex flex-col items-center justify-center my-8">
+-             <Image
+-                src={`https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(guia.movimentoId)}`}
+-                width={180}
+-                height={180}
+-                alt={`QR Code para a guia ${guia.movimentoId}`}
+-            />
+-        </section>
+-
+-        <section>
+-            <h2 className="text-xl font-bold mb-3 flex items-center gap-2"><Beaker size={22} /> Exames Solicitados</h2>
+-            <div className="space-y-2 text-lg">
+-                {guia.exams.map(exam => (
+-                    <p key={exam.id}>
+-                        <strong>{exam.examCode}</strong> - {exam.name}
+-                    </p>
+-                ))}
++        )
++    }
++
++    if (!guia) return null;
++
++    return (
++        <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
++            <header className="flex justify-between items-center mb-4 no-print">
++                <h1 className="text-xl font-bold text-primary">PacienteMobile</h1>
++                <div className="flex gap-2">
++                    <Button onClick={handlePrint} className="font-bold text-base">
++                        <Printer className="mr-2" /> Gerar PDF / Imprimir
++                    </Button>
++                    <Button onClick={() => window.close()} className="font-bold text-base" variant="outline">
++                        FECHAR
++                    </Button>
++                </div>
++            </header>
++
++            <div className="no-print my-6">
++                <Alert variant="default" className="text-left">
++                    <Info className="h-4 w-4" />
++                    <AlertTitle>Como Salvar ou Enviar a Guia?</AlertTitle>
++                    <AlertDescription>
++                        Ap├│s clicar em "Gerar PDF / Imprimir", na janela de impress├úo do seu navegador, escolha o destino **"Salvar como PDF"**. Depois de salvo, voc├¬ poder├í anexar o arquivo em um e-mail ou envi├í-lo pelo WhatsApp.
++                    </AlertDescription>
++                </Alert>
+             </div>
+-        </section>
+-        
+-        <style jsx global>{`
++
++            <h1 className="text-center text-2xl font-bold mb-4">Guia de Solicita├º├úo M├®dica</h1>
++
++            <section className="flex justify-between items-center mb-6 text-sm">
++                <div><strong>Data do Pedido:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</div>
++                <div><strong>Movimenta├º├úo:</strong> {guia.movimentoId}</div>
++            </section>
++
++            <section className="mb-6 text-base border-t border-b border-black py-3">
++                <div className="grid grid-cols-3 gap-x-4 gap-y-2">
++                    {/* Linha 1 */}
++                    <p className="col-span-1"><strong>Nome:</strong> {guia.patient.name}</p>
++                    <p className="col-span-1"><strong>CPF:</strong> {guia.patient.cpf}</p>
++                    <p className="col-span-1"><strong>Telefone:</strong> {guia.patient.telefone}</p>
++
++                    {/* Linha 2 */}
++                    <p className="col-span-1"><strong>ID Plano:</strong> {guia.patient.healthPlanCode}</p>
++                    <p className="col-span-1"><strong>Plano:</strong> {guia.patient.healthPlanName}</p>
++                    <p className="col-span-1"><strong>Matr├¡cula:</strong> {guia.patient.matricula || 'N/A'}</p>
++
++                    {/* Linha 3 */}
++                    <p className="col-span-2"><strong>M├®dico(a):</strong> Dr(a). {guia.medico.name}</p>
++                    <p className="col-span-1"><strong>CRM:</strong> {guia.medico.crm}</p>
++                </div>
++            </section>
++
++            <section className="flex flex-col items-center justify-center my-8">
++                {/* eslint-disable-next-line @next/next/no-img-element */}
++                <img
++                    src={`https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(guia.movimentoId)}`}
++                    width={180}
++                    height={180}
++                    alt={`QR Code para a guia ${guia.movimentoId}`}
++                />
++            </section>
++
++            <section>
++                <h2 className="text-xl font-bold mb-3 flex items-center gap-2"><Beaker size={22} /> Exames Solicitados</h2>
++                <div className="space-y-2 text-lg">
++                    {guia.exams.map(exam => (
++                        <p key={exam.id}>
++                            <strong>{exam.examCode}</strong> - {exam.name}
++                        </p>
++                    ))}
++                </div>
++            </section>
++
++            <style jsx global>{`
+           @media print {
+             .no-print {
+               display: none !important;
+@@ -235,8 +236,8 @@ function PrintLayout() {
+              }
+           }
+         `}</style>
+-    </div>
+-  )
++        </div>
++    )
+ }
+ 
+ export default PrintLayout;
+
+commit 6827f409a2acc2302282a507ee794c7ca65db99a
+Author: Elyson Arag├úo <elysonaragao@gmail.com>
+Date:   Fri Feb 20 15:09:00 2026 +0000
+
+    Primeiro commit Firebase Studio
+
+diff --git a/src/app/print/[data]/page.tsx b/src/app/print/[data]/page.tsx
+new file mode 100644
+index 0000000..82c7906
+--- /dev/null
++++ b/src/app/print/[data]/page.tsx
+@@ -0,0 +1,242 @@
++"use client";
++import * as React from 'react';
++import { useParams } from 'next/navigation';
++import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
++import { useFirestore } from '@/firebase';
++import { Beaker, Loader2, AlertTriangle, Printer, Info } from 'lucide-react';
++import Image from 'next/image';
++
++import { Button } from '@/components/ui/button';
++import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
++import { Patient, Medico, Exam, Movimentacao } from '@/lib/types';
++import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
++
++
++interface GuiaCompleta {
++    movimentoId: string;
++    data: string;
++    patient: Patient;
++    medico: Medico;
++    exams: Exam[];
++}
++
++
++function PrintLayout() {
++  const params = useParams();
++  const firestore = useFirestore();
++  const movimentoId = params.data as string;
++  
++  const [guia, setGuia] = React.useState<GuiaCompleta | null>(null);
++  const [error, setError] = React.useState<string | null>(null);
++  const [isLoading, setIsLoading] = React.useState(true);
++
++  React.useEffect(() => {
++    const fetchGuia = async () => {
++        setIsLoading(true);
++        setError(null);
++        try {
++            if (!firestore) {
++                throw new Error("Conex├úo com banco de dados n├úo estabelecida.");
++            }
++
++            const movQuery = query(collection(firestore, 'movimentacoes'), where('movimentoId', '==', movimentoId), limit(1));
++            const movSnapshot = await getDocs(movQuery);
++
++            if (movSnapshot.empty) {
++                throw new Error("Guia de movimenta├º├úo n├úo encontrada.");
++            }
++            
++            const movDoc = movSnapshot.docs[0];
++            const movData = movDoc.data() as Movimentacao;
++
++            const { pacienteId, medicoId, exameIds, movimentoId: fetchedMovimentoId, data: fetchedData } = movData;
++
++            const patientDoc = await getDoc(doc(firestore, 'pacientes', pacienteId));
++            if (!patientDoc.exists()) throw new Error("Paciente n├úo encontrado.");
++            const patientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
++
++            const medicoDoc = await getDoc(doc(firestore, 'medicos', medicoId));
++            if (!medicoDoc.exists()) throw new Error("M├®dico n├úo encontrado.");
++            const medicoData = { id: medicoDoc.id, ...medicoDoc.data() } as Medico;
++            
++            const examsData: Exam[] = [];
++            for (const examId of exameIds) {
++                const examDoc = await getDoc(doc(firestore, 'exames', examId));
++                if (examDoc.exists()) {
++                    examsData.push({ id: examDoc.id, ...examDoc.data() } as Exam);
++                }
++            }
++            
++            if (examsData.length !== exameIds.length) {
++                console.warn("Alguns exames solicitados n├úo foram encontrados.");
++            }
++
++            setGuia({
++                movimentoId: fetchedMovimentoId,
++                data: fetchedData,
++                patient: patientData,
++                medico: medicoData,
++                exams: examsData
++            });
++
++        } catch (e: any) {
++            setError(e.message || "Ocorreu um erro ao buscar os dados da guia.");
++            console.error(e);
++        } finally {
++            setIsLoading(false);
++        }
++    }
++    
++    if (movimentoId && firestore) {
++      fetchGuia();
++    } else if (!movimentoId) {
++      setError("Nenhuma guia especificada.");
++      setIsLoading(false);
++    }
++  }, [movimentoId, firestore]);
++  
++  const handlePrint = () => {
++    window.print();
++  }
++
++
++  if (isLoading) {
++    return (
++        <div className="flex items-center justify-center min-h-screen bg-gray-50 no-print">
++            <div className="flex flex-col items-center gap-4">
++                <Loader2 className="w-12 h-12 animate-spin text-primary"/>
++                <p className="text-lg text-muted-foreground">Carregando dados da guia...</p>
++            </div>
++        </div>
++    )
++  }
++
++  if (error) {
++    return (
++      <div className="flex items-center justify-center min-h-screen bg-gray-100 no-print">
++        <Card className="w-full max-w-lg text-center shadow-lg">
++            <CardHeader>
++                <CardTitle className="flex flex-col items-center justify-center gap-2">
++                    <AlertTriangle className="w-10 h-10 text-destructive"/>
++                    <span className="mt-2 text-xl">Erro ao Carregar Dados</span>
++                </CardTitle>
++            </CardHeader>
++            <CardContent>
++                <p className="p-3 rounded-md bg-destructive/90 text-destructive-foreground">{error}</p>
++                <p className="mt-4 text-sm text-muted-foreground">Por favor, volte e tente gerar a guia novamente ou verifique o link.</p>
++            </CardContent>
++        </Card>
++      </div>
++    )
++  }
++
++  if (!guia) return null;
++
++  return (
++    <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
++        <header className="flex justify-between items-center mb-4 no-print">
++            <h1 className="text-xl font-bold text-primary">PacienteMobile</h1>
++            <div className="flex gap-2">
++                <Button onClick={handlePrint} className="font-bold text-base">
++                    <Printer className="mr-2"/> Gerar PDF / Imprimir
++                </Button>
++                <Button onClick={() => window.close()} className="font-bold text-base" variant="outline">
++                    FECHAR
++                </Button>
++            </div>
++        </header>
++
++        <div className="no-print my-6">
++             <Alert variant="default" className="text-left">
++                <Info className="h-4 w-4" />
++                <AlertTitle>Como Salvar ou Enviar a Guia?</AlertTitle>
++                <AlertDescription>
++                Ap├│s clicar em "Gerar PDF / Imprimir", na janela de impress├úo do seu navegador, escolha o destino **"Salvar como PDF"**. Depois de salvo, voc├¬ poder├í anexar o arquivo em um e-mail ou envi├í-lo pelo WhatsApp.
++                </AlertDescription>
++            </Alert>
++        </div>
++        
++        <h1 className="text-center text-2xl font-bold mb-4">Guia de Solicita├º├úo M├®dica</h1>
++        
++        <section className="flex justify-between items-center mb-6 text-sm">
++            <div><strong>Data do Pedido:</strong> {new Date(guia.data).toLocaleString('pt-BR')}</div>
++            <div><strong>Movimenta├º├úo:</strong> {guia.movimentoId}</div>
++        </section>
++
++        <section className="mb-6 text-base border-t border-b border-black py-3">
++            <div className="grid grid-cols-3 gap-x-4 gap-y-2">
++                {/* Linha 1 */}
++                <p className="col-span-1"><strong>Nome:</strong> {guia.patient.name}</p>
++                <p className="col-span-1"><strong>CPF:</strong> {guia.patient.cpf}</p>
++                <p className="col-span-1"><strong>Telefone:</strong> {guia.patient.telefone}</p>
++
++                {/* Linha 2 */}
++                <p className="col-span-1"><strong>ID Plano:</strong> {guia.patient.healthPlanCode}</p>
++                <p className="col-span-1"><strong>Plano:</strong> {guia.patient.healthPlanName}</p>
++                <p className="col-span-1"><strong>Matr├¡cula:</strong> {guia.patient.matricula || 'N/A'}</p>
++                
++                {/* Linha 3 */}
++                <p className="col-span-2"><strong>M├®dico(a):</strong> Dr(a). {guia.medico.name}</p>
++                <p className="col-span-1"><strong>CRM:</strong> {guia.medico.crm}</p>
++            </div>
++        </section>
++        
++        <section className="flex flex-col items-center justify-center my-8">
++             <Image
++                src={`https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(guia.movimentoId)}`}
++                width={180}
++                height={180}
++                alt={`QR Code para a guia ${guia.movimentoId}`}
++            />
++        </section>
++
++        <section>
++            <h2 className="text-xl font-bold mb-3 flex items-center gap-2"><Beaker size={22} /> Exames Solicitados</h2>
++            <div className="space-y-2 text-lg">
++                {guia.exams.map(exam => (
++                    <p key={exam.id}>
++                        <strong>{exam.examCode}</strong> - {exam.name}
++                    </p>
++                ))}
++            </div>
++        </section>
++        
++        <style jsx global>{`
++          @media print {
++            .no-print {
++              display: none !important;
++            }
++            body {
++              -webkit-print-color-adjust: exact;
++              print-color-adjust: exact;
++            }
++            @page {
++              size: A4;
++              margin: 0;
++            }
++            .print-container {
++                font-size: 12pt;
++                padding: 2.5rem;
++            }
++            .print-container h1 {
++                font-size: 18pt;
++            }
++             .print-container h2 {
++                font-size: 14pt;
++             }
++             .print-container p, .print-container div, .print-container strong {
++                font-size: 12pt !important;
++             }
++             .print-container .text-sm {
++                font-size: 11pt !important;
++             }
++             .print-container .text-lg {
++                font-size: 12pt !important;
++             }
++          }
++        `}</style>
++    </div>
++  )
++}
++
++export default PrintLayout;
