@@ -113,7 +113,7 @@ export default function LoginPage() {
           <Stethoscope className="w-8 h-8 text-primary" />
         </div>
         <span className="text-3xl bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-          PacienteMobile
+          PetMobile
         </span>
       </div>
 

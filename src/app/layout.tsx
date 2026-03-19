@@ -13,7 +13,7 @@ const ptSans = PT_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'PacienteMobile',
+  title: 'PetMobile',
   description: 'Gestão de Pacientes e Exames',
 };
 

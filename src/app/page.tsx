@@ -108,7 +108,7 @@ function HomeContent() {
   return (
     <div className="flex flex-col items-center text-center p-4">
       <h1 className="text-4xl font-bold font-headline tracking-tight mb-4">
-        Bem-vindo ao PacienteMobile
+        Bem-vindo ao PetMobile
       </h1>
       <p className="text-lg text-muted-foreground max-w-2xl mb-12">
         Sua solução integrada para gestão de pacientes e exames, simplificando o fluxo de atendimento com a geração de QR Codes.

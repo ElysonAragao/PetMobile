@@ -68,7 +68,7 @@ export function Header() {
             title="Clique 6 vezes seguidas para Restaurar o Sistema"
         >
           <Stethoscope className="w-6 h-6 text-primary" />
-          <span className="text-xl font-bold font-headline tracking-tighter text-primary">PacienteMobile</span>
+          <span className="text-xl font-bold font-headline tracking-tighter text-primary">PetMobile</span>
           <span className="text-[10px] opacity-30 font-mono">v2.8</span>
         </div>
 
