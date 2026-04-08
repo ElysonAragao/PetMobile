@@ -39,14 +39,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
   
-  // Redirecionamento automático se já estiver logado
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      console.log("Usuário já autenticado detectado. Redirecionando para Menu...");
-      router.replace('/');
-    }
-  }, [isAuthenticated, router]);
-
   const [showPasswordChange, setShowPasswordChange] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
 
@@ -57,6 +49,32 @@ export default function LoginPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
+  const [isHandlingLogin, setIsHandlingLogin] = React.useState(false);
+
+  // Redirecionamento automático se já estiver logado (mas não se estiver na tela de trocar senha)
+  React.useEffect(() => {
+    if (isAuthenticated && !showPasswordChange && !isHandlingLogin) {
+      console.log("Usuário já autenticado detectado. Redirecionando para Menu...");
+      router.replace('/');
+    }
+  }, [isAuthenticated, showPasswordChange, isHandlingLogin, router]);
+
+  // Check if system is empty
+  React.useEffect(() => {
+    async function checkSetup() {
+      try {
+        const res = await fetch('/api/setup');
+        const data = await res.json();
+        if (data.isEmpty) {
+          console.log("Sistema zerado detectado. Redirecionando para /setup...");
+          router.replace('/setup');
+        }
+      } catch (err) {
+        console.error("Erro ao verificar setup:", err);
+      }
+    }
+    checkSetup();
+  }, [router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -65,6 +83,7 @@ export default function LoginPage() {
 
   async function onSubmit(values: LoginFormValues) {
     setError(null);
+    setIsHandlingLogin(true);
     console.log("Iniciando tentativa de login no servidor...");
     const result = await login(values.email, values.password);
     
@@ -80,6 +99,7 @@ export default function LoginPage() {
     } else {
       console.warn("Falha no login:", result.message);
       setError(result.message || "Ocorreu um erro desconhecido.");
+      setIsHandlingLogin(false);
     }
   }
 
@@ -103,6 +123,9 @@ export default function LoginPage() {
 
     if (!result.success) {
       setChangeError(result.message || "Erro ao alterar a senha.");
+    } else {
+      console.log("Senha alterada com sucesso, redirecionando para o menu.");
+      router.push('/');
     }
   }
 

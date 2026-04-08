@@ -14,6 +14,7 @@ function createAdminClient() {
 async function checkPermissions(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
+        console.log("Admin API: Sem header de autorização.");
         return { isAuthorized: false };
     }
 
@@ -21,19 +22,38 @@ async function checkPermissions(req: NextRequest) {
     const adminClient = createAdminClient();
 
     const { data: { user }, error } = await adminClient.auth.getUser(token);
-    if (error || !user) return { isAuthorized: false };
+    if (error || !user) {
+        console.log("Admin API: Falha ao validar token Auth:", error?.message);
+        return { isAuthorized: false };
+    }
 
-    const { data: profile } = await adminClient
-        .from('usuarios')
-        .select('status, empresa_id, validade')
+    console.log(`Admin API: Buscando perfil para UUID: ${user.id}`);
+
+    // DIAGNÓSTICO: Ver quais tabelas o servidor está enxergando
+    const { data: tableCheck, error: tableError } = await adminClient.from('pet_usuarios').select('id').limit(1);
+    console.log(`Admin API (DIAGNÓSTICO): Teste de conexão tabela 'usuarios' ->`, tableError ? `ERRO: ${tableError.message}` : "OK ✅");
+
+    const { data: tablesRaw, error: tablesError } = await adminClient.rpc('get_tables_info'); // Se tiver o RPC, ou tentamos um select cru
+    if (tablesError) {
+        console.log("Admin API (DIAGNÓSTICO): Não foi possível listar tabelas via RPC. Prosseguindo...");
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+        .from('pet_usuarios')
+        .select('*') // Selecionamos tudo para não depender de nomes exatos de colunas agora
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-    if (!profile) return { isAuthorized: false };
+    if (profileError || !profile) {
+        console.log(`Admin API: Perfil NÃO encontrado para o UUID ${user.id} na tabela 'usuarios'.`);
+        return { isAuthorized: false };
+    }
 
     const role = profile.status;
     const isMaster = role === 'Master';
     const isEmpresaAdmin = role === 'Administrador' || role === 'Administrador Auxiliar';
+
+    console.log(`Admin API: Usuário=${user.email}, Role=${role}, isMaster=${isMaster}, isAuthorized=${isMaster || isEmpresaAdmin}`);
 
     return {
         isAuthorized: isMaster || isEmpresaAdmin,
@@ -57,23 +77,44 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const { action } = body;
 
+        console.log(`Admin API ACTION: ${action} - CORPO:`, JSON.stringify(body, null, 2));
+
         const adminClient = createAdminClient();
 
         // ─── CRIAR EMPRESA ───
         if (action === 'create_empresa') {
             if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode criar empresa.' }, { status: 403 });
-            const { empresaData } = body;
-            if (!empresaData?.razao_social || !empresaData?.nome_fantasia) {
+            const { empresaData: rawData } = body;
+            
+            // SANITIZAÇÃO: Mapeamos apenas o que o banco TêM para evitar erros de colunas extras (contatos, tenants, etc)
+            const cleanData = {
+                razao_social: rawData.razao_social || rawData.razaoSocial,
+                nome_fantasia: rawData.nome_fantasia || rawData.nomeFantasia,
+                cnpj: rawData.cnpj,
+                codigo: rawData.codigo,
+                email: rawData.email,
+                telefone: rawData.telefone,
+                contato: rawData.nome_contato || rawData.contato || rawData.nomeContato,
+                cep: rawData.cep,
+                cidade: rawData.cidade,
+                estado: rawData.estado,
+                logo_url: rawData.logo_url
+            };
+
+            if (!cleanData.razao_social || !cleanData.nome_fantasia) {
                 return NextResponse.json({ error: 'Razão Social e Nome Fantasia são obrigatórios.' }, { status: 400 });
             }
 
             const { data, error } = await adminClient
-                .from('empresas')
-                .insert(empresaData)
+                .from('pet_empresas')
+                .insert(cleanData)
                 .select()
                 .single();
 
-            if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            if (error) {
+                console.error("Admin API ERROR (Insert Empresa):", error.message);
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
             return NextResponse.json({ success: true, empresa: data });
         }
 
@@ -86,7 +127,7 @@ export async function POST(req: NextRequest) {
             if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
 
             const { data, error } = await adminClient
-                .from('empresas')
+                .from('pet_empresas')
                 .update(empresaData)
                 .eq('id', empresaId)
                 .select()
@@ -103,7 +144,7 @@ export async function POST(req: NextRequest) {
             if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
 
             const { error } = await adminClient
-                .from('empresas')
+                .from('pet_empresas')
                 .delete()
                 .eq('id', empresaId);
 
@@ -113,7 +154,8 @@ export async function POST(req: NextRequest) {
 
         // ─── CRIAR USUÁRIO (Auth + Perfil) ───
         if (action === 'create_user') {
-            const { nome, email, status, validade, cpf, crm_uf, telefone, empresaId } = body;
+            const { nome, email, status, validade, cpf, crmv_uf, crm_uf, telefone, empresaId } = body;
+            const finalCrmv = crmv_uf || crm_uf; // Para manter compatibilidade
 
             // Administradores e Auxiliares impõem a própria empresa. Master recebe do body (empresaId selecionada).
             const target_empresa_id = caller.isMaster ? empresaId : caller.empresaId;
@@ -128,8 +170,8 @@ export async function POST(req: NextRequest) {
 
             // NORMALIZAÇÃO: Padronizar variações para o banco
             let finalStatus = status;
-            if (status === 'Médico') finalStatus = 'Medico';
-            if (status === 'Médico Geral') finalStatus = 'Medico Geral';
+            if (status === 'Médico' || status === 'Medico' || status === 'Veterinário') finalStatus = 'MedicoVet';
+            if (status === 'Médico Geral' || status === 'Medico Geral' || status === 'Veterinário Geral') finalStatus = 'MedicoVet Geral';
 
             // REGRAS DE HIERARQUIA
             if (caller.isMaster) {
@@ -142,17 +184,16 @@ export async function POST(req: NextRequest) {
                 if (finalStatus === 'Administrador' || finalStatus === 'Administrador Auxiliar') {
                     return NextResponse.json({ error: 'Você não tem permissão para criar administradores.' }, { status: 403 });
                 }
-
-                // Adm Auxiliar: validade deve ser <= sua própria validade
-                if (validade && caller.validade) {
-                    const novaValidadeDate = new Date(validade);
-                    const callerValidadeDate = new Date(caller.validade);
-                    if (novaValidadeDate > callerValidadeDate) {
-                        return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
-                    }
-                }
             }
             // Administrador 'puro' pode criar qualquer perfil (exceto Master, que já não está no body)
+
+            if (!caller.isMaster && validade && caller.validade) {
+                const novaValidadeDate = new Date(validade);
+                const callerValidadeDate = new Date(caller.validade);
+                if (novaValidadeDate > callerValidadeDate) {
+                    return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
+                }
+            }
 
             const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
                 email,
@@ -166,7 +207,7 @@ export async function POST(req: NextRequest) {
 
             // 2. Criar perfil em usuarios
             const { error: profileError } = await adminClient
-                .from('usuarios')
+                .from('pet_usuarios')
                 .insert({
                     id: authData.user.id,
                     nome,
@@ -175,7 +216,7 @@ export async function POST(req: NextRequest) {
                     empresa_id: finalStatus === 'Master' ? null : target_empresa_id,
                     validade: validade || null,
                     cpf: cpf || null,
-                    crm_uf: crm_uf || null,
+                    crmv_uf: finalCrmv || null,
                     telefone: telefone || null,
                 });
 
@@ -204,7 +245,7 @@ export async function POST(req: NextRequest) {
 
             // Validar permissão para alteração
             if (!caller.isMaster) {
-                const { data: targetUser } = await adminClient.from('usuarios').select('empresa_id, status').eq('id', userId).single();
+                const { data: targetUser } = await adminClient.from('pet_usuarios').select('empresa_id, status').eq('id', userId).single();
                 if (!targetUser || targetUser.empresa_id !== caller.empresaId) {
                     return NextResponse.json({ error: 'Acesso negado ao usuário.' }, { status: 403 });
                 }
@@ -216,12 +257,13 @@ export async function POST(req: NextRequest) {
                     if (userData.status === 'Administrador' || userData.status === 'Administrador Auxiliar') {
                         return NextResponse.json({ error: 'Você não pode promover para administrador.' }, { status: 403 });
                     }
-                    if (userData.validade && caller.validade) {
-                        const novaValidadeDate = new Date(userData.validade);
-                        const callerValidadeDate = new Date(caller.validade);
-                        if (novaValidadeDate > callerValidadeDate) {
-                            return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
-                        }
+                }
+
+                if (userData.validade && caller.validade) {
+                    const novaValidadeDate = new Date(userData.validade);
+                    const callerValidadeDate = new Date(caller.validade);
+                    if (novaValidadeDate > callerValidadeDate) {
+                        return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
                     }
                 }
             }
@@ -231,7 +273,7 @@ export async function POST(req: NextRequest) {
             updatePayload.empresa_id = userData.status === 'Master' ? null : target_empresa_id;
 
             const { error: profileError } = await adminClient
-                .from('usuarios')
+                .from('pet_usuarios')
                 .update(updatePayload)
                 .eq('id', userId);
 
@@ -261,7 +303,7 @@ export async function POST(req: NextRequest) {
             if (!userId) return NextResponse.json({ error: 'ID do usuário é obrigatório.' }, { status: 400 });
 
             if (!caller.isMaster) {
-                const { data: targetUser } = await adminClient.from('usuarios').select('empresa_id, status').eq('id', userId).single();
+                const { data: targetUser } = await adminClient.from('pet_usuarios').select('empresa_id, status').eq('id', userId).single();
                 if (!targetUser || targetUser.empresa_id !== caller.empresaId) {
                     return NextResponse.json({ error: 'Acesso negado ao usuário.' }, { status: 403 });
                 }
@@ -297,7 +339,7 @@ export async function GET(req: NextRequest) {
         const resource = searchParams.get('resource');
 
         if (resource === 'empresas') {
-            let query = adminClient.from('empresas').select('*').order('nome_fantasia');
+            let query = adminClient.from('pet_empresas').select('*').order('nome_fantasia');
             if (!caller.isMaster) {
                 query = query.eq('id', caller.empresaId);
             }
@@ -309,8 +351,8 @@ export async function GET(req: NextRequest) {
 
         if (resource === 'usuarios') {
             let query = adminClient
-                .from('usuarios')
-                .select('id, empresa_id, codigo, nome, cpf, crm_uf, email, telefone, status, validade, created_at, empresas(nome_fantasia)')
+                .from('pet_usuarios')
+                .select('id, empresa_id, codigo, nome, cpf, crmv_uf, email, telefone, status, validade, created_at, empresas:pet_empresas(nome_fantasia, codigo)')
                 .order('nome');
 
             if (!caller.isMaster) {

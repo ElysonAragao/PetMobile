@@ -24,10 +24,30 @@ declare global {
 
 export function Header() {
   const { user, logout, isLoading } = useSession();
+  const [mounted, setMounted] = React.useState(false);
   
   // Controle de clique pânico localmente no logotipo
   const [panicClicks, setPanicClicks] = React.useState(0);
   const [lastClick, setLastClick] = React.useState(0);
+
+  // Informamos ao monitor de pânico que o React está vivo e marcamos como montado
+  React.useEffect(() => {
+    setMounted(true);
+    window.reactHealthy = true;
+  }, []);
+
+  if (!mounted) {
+    return (
+      <header className="bg-card/95 backdrop-blur-md border-b sticky top-0 z-[100] w-full shadow-md select-none">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Stethoscope className="w-6 h-6 text-primary" />
+            <span className="text-xl font-bold font-headline tracking-tighter text-primary">PetMobile</span>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   const handleLogoClick = () => {
     const now = Date.now();
@@ -44,11 +64,6 @@ export function Header() {
     }
     setLastClick(now);
   };
-
-  // Informamos ao monitor de pânico que o React está vivo
-  React.useEffect(() => {
-    window.reactHealthy = true;
-  }, []);
 
   const getInitials = (n?: string) => {
     if (!n) return "??";

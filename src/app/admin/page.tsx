@@ -61,11 +61,11 @@ interface AdminUser {
     telefone?: string;
     status: string;
     cpf?: string;
-    crm_uf?: string;
+    crmv_uf?: string;
     empresa_id: string | null;
     validade?: string;
     created_at: string;
-    empresas?: { nome_fantasia: string } | null;
+    empresas?: { nome_fantasia: string; codigo: string } | null;
 }
 
 // ─────────── API Helper ───────────
@@ -220,7 +220,7 @@ function EmpresasTab() {
                         </div>
                         <div className="space-y-2">
                             <Label>Código</Label>
-                            <Input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: Emp_01" />
+                            <Input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: pet001" />
                         </div>
                         <div className="space-y-2">
                             <Label>E-mail</Label>
@@ -349,7 +349,7 @@ function UsuariosTab() {
     // Form state
     const [form, setForm] = React.useState({
         nome: "", email: "", telefone: "", status: "", empresa_id: "", validade: "",
-        cpf: "", crm_uf: "",
+        cpf: "", crmv_uf: "",
     });
     const [saving, setSaving] = React.useState(false);
 
@@ -392,7 +392,7 @@ function UsuariosTab() {
     React.useEffect(() => { fetchData(); }, [fetchData]);
 
     const resetForm = () => {
-        setForm({ nome: "", email: "", telefone: "", status: "", empresa_id: "", validade: "", cpf: "", crm_uf: "" });
+        setForm({ nome: "", email: "", telefone: "", status: "", empresa_id: "", validade: "", cpf: "", crmv_uf: "" });
         setEditingUser(null);
         setShowForm(false);
     };
@@ -410,7 +410,6 @@ function UsuariosTab() {
         setSaving(true);
         const action = editingUser ? "update_user" : "create_user";
 
-        // Formatar validade: se Administrador, passa null (ilimitada). Se não, formato yyyy-MM-dd
         const formattedValidade = form.status === "Administrador" ? null : (form.validade || null);
 
         const body = editingUser
@@ -427,7 +426,7 @@ function UsuariosTab() {
                 action,
                 ...form,
                 validade: formattedValidade,
-                empresaId: form.status === "Master" ? null : form.empresa_id // Backend API needs camelCase for create!
+                empresaId: form.status === "Master" ? null : form.empresa_id
             };
 
         const res = await adminApi("POST", body);
@@ -452,7 +451,7 @@ function UsuariosTab() {
             empresa_id: user.empresa_id || "",
             validade: user.validade || "",
             cpf: user.cpf || "",
-            crm_uf: user.crm_uf || "",
+            crmv_uf: user.crmv_uf || "",
         });
         setShowForm(true);
     };
@@ -480,8 +479,10 @@ function UsuariosTab() {
         Master: "destructive",
         Administrador: "default",
         "Administrador Auxiliar": "default",
-        Medico: "secondary",
+        "Veterinário": "secondary",
+        "Veterinário Geral": "secondary",
         "Secretária": "secondary",
+        "Secretária Geral": "secondary",
         Leitor: "outline",
         "Relatórios": "outline",
     };
@@ -502,8 +503,8 @@ function UsuariosTab() {
                         <DialogTitle>{editingUser ? "Editar Usuário" : "Novo Usuário"}</DialogTitle>
                         <DialogDescription>
                             {editingUser
-                                ? "Altere as informações do usuário. A senha não pode ser vista ou alterada aqui (use resetar se necessário)."
-                                : "O usuário receberá a senha provisória 123456 e será forçado a trocá-la no primeiro login."}
+                                ? "Altere as informações do usuário."
+                                : "O usuário receberá a senha provisória 123456."}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
@@ -534,17 +535,15 @@ function UsuariosTab() {
                                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Administrador">Administrador (Ilimitado)</SelectItem>
-                                        {/* Master cadastra apenas Administrador de cada empresa conforme novos critérios */}
                                         {editingUser && (
                                             <>
                                                 <SelectItem value="Master">Master</SelectItem>
                                                 <SelectItem value="Administrador Auxiliar">Adm Auxiliar</SelectItem>
-                                                <SelectItem value="Medico">Médico</SelectItem>
-                                                <SelectItem value="Medico Geral">Médico Geral</SelectItem>
+                                                <SelectItem value="Veterinário">Veterinário</SelectItem>
+                                                <SelectItem value="Veterinário Geral">Veterinário Geral</SelectItem>
                                                 <SelectItem value="Secretária">Secretária</SelectItem>
                                                 <SelectItem value="Secretária Geral">Secretária Geral</SelectItem>
                                                 <SelectItem value="Leitor">Leitor</SelectItem>
-                                                <SelectItem value="Leitor Geral">Leitor Geral</SelectItem>
                                                 <SelectItem value="Relatórios">Relatórios</SelectItem>
                                             </>
                                         )}
@@ -568,10 +567,10 @@ function UsuariosTab() {
                             </div>
                         </div>
 
-                        {form.status === "Medico" && (
+                        {(form.status === "Veterinário" || form.status === "Veterinário Geral") && (
                             <div className="space-y-2">
-                                <Label>CRM / UF do Médico</Label>
-                                <Input value={form.crm_uf} onChange={e => setForm({ ...form, crm_uf: e.target.value })} placeholder="Ex: 12345/SP" />
+                                <Label>CRMV / UF do Veterinário</Label>
+                                <Input value={form.crmv_uf} onChange={e => setForm({ ...form, crmv_uf: e.target.value })} placeholder="Ex: 12345/SP" />
                             </div>
                         )}
 
@@ -617,15 +616,13 @@ function UsuariosTab() {
                                     <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('email')}>
                                         <div className="flex items-center">E-mail <ArrowUpDown className="ml-2 h-4 w-4" /></div>
                                     </TableHead>
-                                    <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('cpf')}>
-                                        <div className="flex items-center">CPF / CRM <ArrowUpDown className="ml-2 h-4 w-4" /></div>
-                                    </TableHead>
                                     <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('status')}>
                                         <div className="flex items-center">Perfil <ArrowUpDown className="ml-2 h-4 w-4" /></div>
                                     </TableHead>
                                     <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('empresas')}>
                                         <div className="flex items-center">Empresa <ArrowUpDown className="ml-2 h-4 w-4" /></div>
                                     </TableHead>
+                                    <TableHead>Cód. Empresa</TableHead>
                                     <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('validade')}>
                                         <div className="flex items-center">Validade <ArrowUpDown className="ml-2 h-4 w-4" /></div>
                                     </TableHead>
@@ -643,19 +640,12 @@ function UsuariosTab() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex flex-col text-xs text-muted-foreground">
-                                                <span>{user.cpf ? `CPF: ${user.cpf}` : "Sem CPF"}</span>
-                                                {(user.status === 'Medico' || user.status === 'Medico Geral') && (
-                                                    <span>{user.crm_uf ? `CRM: ${user.crm_uf}` : "Sem CRM"}</span>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
                                             <Badge variant={statusColors[user.status] || "secondary"}>
                                                 {user.status}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>{user.empresas?.nome_fantasia || (user.status === "Master" ? "—" : "Sem empresa")}</TableCell>
+                                        <TableCell className="font-mono text-xs">{user.empresas?.codigo || "—"}</TableCell>
                                         <TableCell>{user.validade ? format(new Date(user.validade), "dd/MM/yyyy") : "—"}</TableCell>
                                         <TableCell className="text-right space-x-1">
                                             <Button variant="ghost" size="icon" title="Editar usuário" onClick={() => handleEditUser(user)}>
@@ -672,7 +662,7 @@ function UsuariosTab() {
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Resetar senha?</AlertDialogTitle>
                                                         <AlertDialogDescription>
-                                                            A senha de &quot;{user.nome}&quot; será redefinida para <strong>123456</strong>. O usuário precisará trocá-la no próximo login.
+                                                            A senha de &quot;{user.nome}&quot; será redefinida para 123456.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
@@ -692,7 +682,7 @@ function UsuariosTab() {
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
                                                         <AlertDialogDescription>
-                                                            Isso removerá a conta de &quot;{user.nome}&quot; permanentemente do sistema (Auth + perfil).
+                                                            Isso removerá a conta de &quot;{user.nome}&quot; permanentemente.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>

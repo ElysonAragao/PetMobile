@@ -10,8 +10,9 @@ import { useSession } from '@/context/session-context';
 const baseUserFormSchema = z.object({
     nome: z.string().min(1, "Nome é obrigatório"),
     email: z.string().email("E-mail inválido."),
-    status: z.enum(['Administrador', 'Administrador Auxiliar', 'Medico', 'Medico Geral', 'Secretária', 'Secretária Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
+    status: z.enum(['Administrador', 'Administrador Auxiliar', 'MedicoVet', 'MedicoVet Geral', 'Secretária', 'Secretária Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
     dataValidade: z.date().optional(),
+    telefone: z.string().optional().default(''),
 });
 
 const refineValidade = (data: { status: string; dataValidade?: Date }, ctx: z.RefinementCtx) => {
@@ -45,8 +46,8 @@ export function useUsers() {
             // Se o usuário Master ainda não tem uma empresa selecionada, não trazemos nada ou podemos trazer tudo dependendo da decisão,
             // mas logica coerente é trazer os usuários da empresa selecionada.
             let query = supabase
-                .from('usuarios')
-                .select('id, empresa_id, numUsuario:codigo, nome, cpf, crm_uf, email, telefone, status, dataValidade:validade, dataCadastro:created_at')
+                .from('pet_usuarios')
+                .select('id, empresaId:empresa_id, numUsuario:codigo, nome, cpf, crmvUf:crmv_uf, email, telefone, status, dataValidade:validade, dataCadastro:created_at')
                 .order('nome');
 
             if (selectedEmpresaId) {
@@ -86,7 +87,8 @@ export function useUsers() {
                     email: userData.email,
                     status: userData.status,
                     validade: userData.status === 'Administrador' ? null : (userData.dataValidade ? format(userData.dataValidade, 'yyyy-MM-dd') : null),
-                    empresaId: selectedEmpresaId
+                    empresaId: selectedEmpresaId,
+                    telefone: userData.telefone || null,
                     // Se for Master, manda o selectedEmpresaId que o backend usará; 
                     // Se for Adm/AdmAux, o selectedEmpresaId já será o mesmo ID real do criador e o backend validará.
                 })
@@ -124,6 +126,7 @@ export function useUsers() {
                         nome: userData.nome,
                         status: userData.status,
                         validade: userData.status === 'Administrador' ? null : (userData.dataValidade ? format(userData.dataValidade, 'yyyy-MM-dd') : null),
+                        telefone: userData.telefone || null,
                     }
                 })
             });

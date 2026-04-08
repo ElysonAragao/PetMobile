@@ -20,7 +20,7 @@ async function getNextHealthPlanCode(supabase: any): Promise<string> {
     // Using ans_code as the storage for codPlano to keep compatibility with the SQL schema
     // if a specific cod_plano column wasn't created.
     const { data, error } = await supabase
-        .from('planos_saude')
+        .from('pet_planos_saude')
         .select('nome, ans_code')
         .order('created_at', { ascending: false })
         .limit(10); // Check recent to find highest, a real sequence is better in PG
@@ -60,7 +60,7 @@ export function useHealthPlans() {
         setIsLoading(true);
         try {
             let query = supabase
-                .from('planos_saude')
+                .from('pet_planos_saude')
                 .select('*')
                 .order('nome');
 
@@ -98,7 +98,7 @@ export function useHealthPlans() {
         try {
             // Check for existing plan with the same name to avoid duplicates
             const { data: existingData } = await supabase
-                .from('planos_saude')
+                .from('pet_planos_saude')
                 .select('id')
                 .eq('nome', planData.nome)
                 .limit(1);
@@ -122,7 +122,7 @@ export function useHealthPlans() {
             };
 
             const { data, error: insertError } = await supabase
-                .from('planos_saude')
+                .from('pet_planos_saude')
                 .insert(finalPlanData)
                 .select('id')
                 .single();
@@ -146,7 +146,7 @@ export function useHealthPlans() {
             if (Object.keys(dataToUpdate).length === 0) return { success: true };
 
             const { error: updateError } = await supabase
-                .from('planos_saude')
+                .from('pet_planos_saude')
                 .update(dataToUpdate)
                 .eq('id', planId);
 
@@ -163,7 +163,7 @@ export function useHealthPlans() {
     const deleteHealthPlan = useCallback(async (planId: string) => {
         try {
             const { error } = await supabase
-                .from('planos_saude')
+                .from('pet_planos_saude')
                 .delete()
                 .eq('id', planId);
 

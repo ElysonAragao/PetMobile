@@ -217,6 +217,7 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
 
 function ExamForm({ onFormSubmit, initialData, getNextExamCode }: { onFormSubmit: (values: ExamFormValues) => Promise<any>, initialData?: Partial<ExamFormValues>, getNextExamCode: (type: 'Laboratório' | 'Imagem') => Promise<string> }) {
   const { healthPlans } = useHealthPlans();
+  const nameInputRef = React.useRef<HTMLInputElement>(null);
 
   const form = useForm<ExamFormValues>({
     resolver: zodResolver(examSchema),
@@ -241,6 +242,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode }: { onFormSubmit
     await onFormSubmit(values);
     if (!initialData) {
       form.reset({ name: "", description: "", type: undefined, examCode: "", idExame: "", healthPlanId: null, healthPlanName: null });
+      setTimeout(() => nameInputRef.current?.focus(), 100);
     }
   }
 
@@ -306,7 +308,14 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode }: { onFormSubmit
               <FormItem className="md:col-span-2">
                 <FormLabel>Nome do Exame</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: Hemograma Completo" {...field} />
+                  <Input 
+                    placeholder="Ex: Hemograma Completo" 
+                    {...field} 
+                    ref={(e) => {
+                      field.ref(e);
+                      nameInputRef.current = e;
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -23,7 +23,7 @@ async function getNextExamCode(supabase: any, type: 'Laboratório' | 'Imagem'): 
     const prefix = type === 'Laboratório' ? 'EL' : 'EI';
 
     const { data, error } = await supabase
-        .from('exames')
+        .from('pet_exames')
         .select('codigo')
         .eq('tipo', type)
         .order('codigo', { ascending: false })
@@ -71,7 +71,7 @@ export function useExams() {
         try {
             console.log("Buscando exames para empresa:", selectedEmpresaId);
             let query = supabase
-                .from('exames')
+                .from('pet_exames')
                 .select('*')
                 .order('nome');
  
@@ -133,7 +133,7 @@ export function useExams() {
             };
 
             const { data, error: insertError } = await supabase
-                .from('exames')
+                .from('pet_exames')
                 .insert(finalExamData)
                 .select('id')
                 .single();
@@ -172,7 +172,7 @@ export function useExams() {
             if (Object.keys(dataToUpdate).length === 0) return { success: true };
 
             const { error: updateError } = await supabase
-                .from('exames')
+                .from('pet_exames')
                 .update(dataToUpdate)
                 .eq('id', examId);
 
@@ -189,7 +189,7 @@ export function useExams() {
     const deleteExam = useCallback(async (examId: string) => {
         try {
             const { error } = await supabase
-                .from('exames')
+                .from('pet_exames')
                 .delete()
                 .eq('id', examId);
 
@@ -206,7 +206,7 @@ export function useExams() {
             // To prevent accidental deletion, we require explicit conditions.
             // If tenant isolation is active, we can just delete where id is not null.
             const { error } = await supabase
-                .from('exames')
+                .from('pet_exames')
                 .delete()
                 .neq('id', '00000000-0000-0000-0000-000000000000'); // dummy condition to delete all accessible
 

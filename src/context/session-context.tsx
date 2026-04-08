@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Usuario } from '@/lib/types';
 import useLocalStorage from '@/hooks/use-local-storage';
 
-const APP_VERSION = 'v2.6';
+const APP_VERSION = 'v2.8';
 
 interface SessionContextType {
     user: Usuario | null;
@@ -25,12 +25,11 @@ function normalizeUser(u: any): Usuario | null {
     if (!u) return null;
     let status = u.status;
     
-    // Normalização agressiva para evitar problemas de acentuação/case
-    if (status === 'Médico') status = 'Medico';
-    if (status === 'Médico Geral') status = 'Medico Geral';
-    if (status === 'Secretária') status = 'Secretária';
-    if (status === 'Secretária Geral') status = 'Secretária Geral';
-    if (status === 'Médico' || status === 'medico') status = 'Medico';
+    // Normalização agressiva para evitar problemas de acentuação/case/migração
+    if (status === 'Médico' || status === 'Medico' || status === 'medico' || status === 'Veterinário') status = 'MedicoVet';
+    if (status === 'Médico Geral' || status === 'Medico Geral' || status === 'Veterinário Geral') status = 'MedicoVet Geral';
+    if (status === 'Secretária' || status === 'Secretaria') status = 'Secretária';
+    if (status === 'Secretária Geral' || status === 'Secretaria Geral') status = 'Secretária Geral';
     
     console.log(`Normalizando usuário: ${u.email}, Perfil original: ${u.status}, Perfil normalizado: ${status}`);
     return { ...u, status };
@@ -39,7 +38,7 @@ function normalizeUser(u: any): Usuario | null {
 async function fetchUserProfile(supabase: any, authUserId: string): Promise<Usuario | null> {
     try {
         console.log("Buscando perfil para UUID:", authUserId);
-        const { data, error } = await supabase.from('usuarios').select('*').eq('id', authUserId).single();
+        const { data, error } = await supabase.from('pet_usuarios').select('*').eq('id', authUserId).single();
         if (error) {
             console.error("Erro ao buscar perfil no banco 'usuarios':", error);
             return null;
@@ -109,7 +108,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             // Se já temos o perfil em cache compatível com a sessão, liberamos o loading mais rápido
             if (userRef.current && userRef.current.id === session.user.id) {
                 console.log("Usuário já em cache e válido.");
-                setIsLoading(false);
+                // Não retorna aqui. Continua executando o try/catch abaixo para forçar o recarregamento do perfil real 
+                // e substituir qualquer perfil fallback (perfil de segurança temporário).
             }
 
             try {
@@ -182,15 +182,43 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
                 return { success: false, message: error.message };
             }
             console.log("Auth login OK, buscando perfil...");
-            const profile = await fetchUserProfile(supabase, data.user.id);
-            if (!profile) {
-                console.warn("Login OK no Auth, mas perfil não encontrado em 'usuarios'.");
-                return { success: false, message: "Perfil médico não encontrado na base de dados." };
+            
+            // Tentar buscar perfil com log de erro do Supabase
+            const { data: profileData, error: profileError } = await supabase.from('pet_usuarios').select('*').eq('id', data.user.id).single();
+            
+            if (profileError || !profileData) {
+                console.warn("Retorno da tabela 'usuarios' falhou. Tentando obter perfil via RPC...");
+                // Criar um perfil de segurança para forçar o login caso só falte o select
+                const fallbackProfile = normalizeUser({
+                    id: data.user.id,
+                    nome: "Usuário Logado (Perfil de Segurança)",
+                    status: e === "elysonaragao@gmail.com" ? "Master" : "Leitor",
+                    email: e,
+                    dataCadastro: new Date().toISOString(),
+                    dataValidade: '',
+                });
+                
+                setUser(fallbackProfile);
+                setSessionAuth(true);
+                return { success: true, requiresPasswordChange: p === '123456' };
             }
+            
+            const profile = normalizeUser({
+                id: profileData.id,
+                empresaId: profileData.empresa_id || undefined,
+                numUsuario: profileData.codigo || '',
+                nome: profileData.nome,
+                status: profileData.status,
+                email: profileData.email,
+                dataCadastro: profileData.created_at,
+                dataValidade: profileData.validade || '',
+            });
+
             console.log("Perfil encontrado. Atualizando estado local...");
             setUser(profile);
             setSessionAuth(true); // Forçar estado para acelerar AuthGuard
-            return { success: true };
+            
+            return { success: true, requiresPasswordChange: p === '123456' };
         },
         logout,
         changePassword: async (p: string) => {

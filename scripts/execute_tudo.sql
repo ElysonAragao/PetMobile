@@ -66,10 +66,10 @@ CREATE TABLE public.usuarios (
   codigo text,
   nome text NOT NULL,
   cpf text,
-  crm_uf text,
+  crmv_uf text,
   email text UNIQUE NOT NULL,
   telefone text,
-  status text NOT NULL CHECK (status IN ('Master', 'Administrador', 'Administrador Auxiliar', 'Medico', 'Secretária', 'Leitor', 'Relatórios')),
+  status text NOT NULL CHECK (status IN ('Master', 'Administrador', 'Administrador Auxiliar', 'MedicoVet', 'MedicoVet Geral', 'Secretária', 'Secretária Geral', 'Leitor', 'Leitor Geral', 'Relatórios')),
   validade date,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -248,7 +248,6 @@ CREATE POLICY "Movimentacoes Select" ON public.movimentacoes FOR SELECT USING (p
 CREATE POLICY "Movimentacoes Insert" ON public.movimentacoes FOR INSERT WITH CHECK (public.is_master() OR empresa_id = public.empresa_atual());
 CREATE POLICY "Movimentacoes Update" ON public.movimentacoes FOR UPDATE USING (public.is_master() OR empresa_id = public.empresa_atual());
 CREATE POLICY "Movimentacoes Delete" ON public.movimentacoes FOR DELETE USING (public.is_master() OR empresa_id = public.empresa_atual());
-CREATE POLICY "LeituraExames Delete" ON public.leitura_exames FOR DELETE USING (public.is_master() OR empresa_id = public.empresa_atual());
 
 -- ==========================================
 -- 5. CRIAÇÃO DO USUÁRIO MASTER
@@ -258,7 +257,7 @@ DO $$
 DECLARE
   new_user_id uuid := gen_random_uuid();
   user_email text := 'elysonaragao@gmail.com';
-  user_pass text := 'Admin1234';
+  user_pass text := 'Admin1234pet';
 BEGIN
   -- 1. Remove o usuário antigo do Auth se existir (para evitar erro de e-mail duplicado)
   DELETE FROM auth.users WHERE email = user_email;

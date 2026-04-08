@@ -43,10 +43,10 @@ CREATE TABLE public.usuarios (
   codigo text,
   nome text NOT NULL,
   cpf text,
-  crm_uf text,
+  crmv_uf text,
   email text UNIQUE NOT NULL,
   telefone text,
-  status text NOT NULL CHECK (status IN ('Master', 'Administrador', 'Administrador Auxiliar', 'Medico', 'Secretária', 'Leitor', 'Relatórios')),
+  status text NOT NULL CHECK (status IN ('Master', 'Administrador', 'Administrador Auxiliar', 'MedicoVet', 'MedicoVet Geral', 'Secretária', 'Secretária Geral', 'Leitor', 'Leitor Geral', 'Relatórios')),
   validade date,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );

@@ -1,4 +1,5 @@
 "use client";
+import * as React from "react";
 import {
   Card,
   CardContent,
@@ -6,18 +7,20 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, FileText, UserPlus, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield } from 'lucide-react';
+import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
-import { useEffect, Suspense } from 'react';
+import { Suspense } from 'react';
 
 function HomeContent() {
   const { user } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mounted, setMounted] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    setMounted(true);
     // 1. Pulo duplo de navegação: se a URL pedir, vai para o /movement direto.
     if (searchParams.get('redirect') === 'movement') {
       router.replace('/movement');
@@ -33,7 +36,9 @@ function HomeContent() {
     }
   }, [searchParams, router]);
 
-  type UserRole = 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Supervisor' | 'Secretária' | 'Secretária Geral' | 'Médico' | 'Medico' | 'Medico Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
+  if (!mounted) return null;
+
+  type UserRole = 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Supervisor' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
 
   const features: { title: string; description: string; href: string; icon: React.ReactNode; roles: UserRole[] }[] = [
     {
@@ -44,11 +49,11 @@ function HomeContent() {
       roles: ['Master'],
     },
     {
-      title: 'Cadastro de Pacientes',
-      description: 'Adicione e gerencie os dados dos pacientes.',
-      href: '/patients',
-      icon: <UserPlus className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária'],
+      title: 'Cadastro de Pets',
+      description: 'Adicione e gerencie os dados dos animais e seus tutores.',
+      href: '/pets',
+      icon: <PawPrint className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral'],
     },
     {
       title: 'Cadastro de Exames',
@@ -58,14 +63,14 @@ function HomeContent() {
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
-      title: 'Cadastro de Médicos',
-      description: 'Adicione e gerencie os médicos do sistema.',
-      href: '/medicos',
+      title: 'Corpo Clínico (Vets)',
+      description: 'Adicione e gerencie os veterinários da clínica.',
+      href: '/veterinarios',
       icon: <Stethoscope className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
-      title: 'Cadastro de Planos de Saúde',
+      title: 'Convênios Veterinários',
       description: 'Gerencie os planos e convênios disponíveis.',
       href: '/planos-saude',
       icon: <HeartPulse className="h-8 w-8 text-primary" />,
@@ -76,7 +81,7 @@ function HomeContent() {
       description: 'Gere guias de exames com QR Code para pacientes.',
       href: '/movement',
       icon: <Send className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Médico', 'Medico', 'Medico Geral'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral'],
     },
     {
       title: 'Leitura de QR Code',

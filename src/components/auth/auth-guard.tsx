@@ -6,18 +6,21 @@ import { useSession } from '@/context/session-context';
 import { Loader2, RefreshCw, Smartphone, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const publicPaths = ['/login'];
+const publicPaths = ['/login', '/setup'];
 
 const roleRoutes: Record<string, string[]> = {
     'Master': ['*'],
     'Administrador': ['*'],
     'Administrador Auxiliar': ['*'],
     'Supervisor': ['*'],
-    'Secretária': ['/patients', '/print'],
-    'Secretária Geral': ['/patients', '/print'],
-    'Médico': ['/movement', '/patients', '/print'],
-    'Medico': ['/movement', '/patients', '/print'],
-    'Medico Geral': ['/movement', '/patients', '/print'],
+    'Secretária': ['/pets', '/print'],
+    'Secretária Geral': ['/pets', '/print'],
+    'Veterinário': ['/movement', '/pets', '/print'],
+    'Veterinário Geral': ['/movement', '/pets', '/print'],
+    'Médico': ['/movement', '/pets', '/print'],
+    'MedicoVet': ['/movement', '/pets', '/print'],
+    'MedicoVet Geral': ['/movement', '/pets', '/print'],
+    'Medico': ['/movement', '/pets', '/print'],
     'Leitor': ['/scan', '/print'],
     'Leitor Geral': ['/scan', '/print'],
     'Relatórios': ['/leituras', '/print'],

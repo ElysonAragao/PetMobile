@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, UserCog, Calendar as CalendarIcon, ShieldAlert, LogIn, Undo2 } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, UserCog, Calendar as CalendarIcon, ShieldAlert, LogIn, Undo2, Key } from 'lucide-react';
 import { format, addYears, parse } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -12,6 +12,7 @@ import Link from 'next/link';
 
 import { Usuario } from '@/lib/types';
 import { useUsers, UserFormValues } from '@/hooks/use-user-management';
+import { forcarTrocaDeSenha } from '@/app/actions/usuarios';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,13 +32,14 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSession } from '@/context/session-context';
 
-type UserRole = 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'Medico' | 'Medico Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
+type UserRole = 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
 
 const userFormSchema = z.object({
   nome: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido."),
-  status: z.enum(['Administrador', 'Administrador Auxiliar', 'Secretária', 'Secretária Geral', 'Medico', 'Medico Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
+  status: z.enum(['Administrador', 'Administrador Auxiliar', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
   dataValidade: z.date({ required_error: "Data de validade é obrigatória" }),
+  telefone: z.string().optional().default(''),
 });
 
 const editUserSchema = userFormSchema.omit({ email: true });
@@ -151,6 +153,7 @@ function UserList({ users, isLoaded, onEdit, onDelete }: { users: Usuario[], isL
                 <TableHead><Button variant="ghost" onClick={() => requestSort('email')}>Email{getSortIndicator('email')}</Button></TableHead>
                 <TableHead><Button variant="ghost" onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</Button></TableHead>
                 <TableHead><Button variant="ghost" onClick={() => requestSort('dataValidade')}>Validade{getSortIndicator('dataValidade')}</Button></TableHead>
+                <TableHead>Telefone</TableHead>
                 <TableHead><Button variant="ghost" onClick={() => requestSort('dataCadastro')}>Cadastro{getSortIndicator('dataCadastro')}</Button></TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -167,6 +170,7 @@ function UserList({ users, isLoaded, onEdit, onDelete }: { users: Usuario[], isL
                     </Badge>
                   </TableCell>
                   <TableCell>{getFormattedDate(user.dataValidade)}</TableCell>
+                  <TableCell>{user.telefone || '-'}</TableCell>
                   <TableCell>{format(new Date(user.dataCadastro), 'dd/MM/yyyy HH:mm')}</TableCell>
                   <TableCell className="text-right">
                     {canManageUser(user) && (
@@ -199,7 +203,7 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
 
   const form = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(isEditMode ? editUserSchema : userFormSchema) as any,
-    defaultValues: { nome: "", email: "", status: undefined as any, dataValidade: undefined },
+    defaultValues: { nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "" },
   });
 
   const status = form.watch('status');
@@ -210,8 +214,8 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
       return [
         { value: 'Secretária', label: 'Secretária' },
         { value: 'Secretária Geral', label: 'Secretária Geral' },
-        { value: 'Medico', label: 'Médico' },
-        { value: 'Medico Geral', label: 'Médico Geral' },
+        { value: 'MedicoVet', label: 'Médico Veterinário' },
+        { value: 'MedicoVet Geral', label: 'Médico Vet. Geral' },
         { value: 'Leitor', label: 'Leitor' },
         { value: 'Leitor Geral', label: 'Leitor Geral' },
         { value: 'Relatórios', label: 'Relatórios' },
@@ -219,12 +223,12 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
     }
     // Administrador (e o Master agindo pela Empresa) pode criar todos os perfis abaixo dele
     return [
-      { value: 'Administrador', label: 'Administrador (Validade Ilimitada)' },
+      { value: 'Administrador', label: 'Administrador Empresarial' },
       { value: 'Administrador Auxiliar', label: 'Administrador Auxiliar' },
       { value: 'Secretária', label: 'Secretária' },
       { value: 'Secretária Geral', label: 'Secretária Geral' },
-      { value: 'Medico', label: 'Médico' },
-      { value: 'Medico Geral', label: 'Médico Geral' },
+      { value: 'MedicoVet', label: 'Médico Veterinário' },
+      { value: 'MedicoVet Geral', label: 'Médico Vet. Geral' },
       { value: 'Leitor', label: 'Leitor' },
       { value: 'Leitor Geral', label: 'Leitor Geral' },
       { value: 'Relatórios', label: 'Relatórios' },
@@ -233,7 +237,7 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
 
   // Data máxima de validade: para Administrador Auxiliar, é sua própria validade
   const maxValidityDate: Date | undefined = React.useMemo(() => {
-    if (currentUser?.status === 'Administrador Auxiliar' && currentUser.dataValidade) {
+    if ((currentUser?.status === 'Administrador Auxiliar' || currentUser?.status === 'Administrador') && currentUser.dataValidade) {
       try {
         const parsed = parse(currentUser.dataValidade, 'yyyy-MM-dd', new Date());
         if (!isNaN(parsed.getTime())) return parsed;
@@ -243,9 +247,7 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
   }, [currentUser]);
 
   React.useEffect(() => {
-    if (status === 'Administrador') {
-      form.setValue('dataValidade', undefined as any);
-    } else if (!isEditMode && status && !form.getValues('dataValidade')) {
+    if (!isEditMode && status && !form.getValues('dataValidade')) {
       // Para novo usuário, default 1 ano. Se supervisor, limita à sua validade
       const defaultDate = addYears(new Date(), 1);
       if (maxValidityDate && defaultDate > maxValidityDate) {
@@ -278,11 +280,12 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
         nome: initialData.nome,
         status: initialData.status as any,
         dataValidade: parsedDate,
-        email: initialData.email
+        email: initialData.email,
+        telefone: initialData.telefone || ""
       });
     } else {
       form.reset({
-        nome: "", email: "", status: undefined as any, dataValidade: undefined
+        nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: ""
       })
     }
   }, [initialData, isEditMode, form]);
@@ -290,7 +293,7 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
   async function onSubmit(values: z.infer<typeof userFormSchema | typeof editUserSchema>) {
     await onFormSubmit(values);
     if (!isEditMode) {
-      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined });
+      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "" });
     }
   }
 
@@ -302,7 +305,7 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
           <AlertTitle className="text-blue-800">Senha Padrão</AlertTitle>
           <AlertDescription className="text-blue-700">
             {isEditMode
-              ? "A senha do usuário não pode ser alterada por aqui. O próprio usuário define sua senha no primeiro login."
+              ? "Para alterar a senha deste usuário sem confirmação, utilize o painel 'Forçar Troca de Senha' abaixo deste formulário."
               : "O novo usuário receberá a senha padrão \"123\". No primeiro login, será solicitado que defina uma nova senha."}
           </AlertDescription>
         </Alert>
@@ -348,39 +351,52 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
             )}
           />
         </div>
-        <FormField
-          control={form.control}
-          name="dataValidade"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel>Data de Validade {status === 'Administrador' ? <span className="text-xs text-muted-foreground">(Ilimitada)</span> : maxValidityDate && <span className="text-xs text-muted-foreground">(Máx: {format(maxValidityDate, 'dd/MM/yyyy')})</span>}</FormLabel>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <FormControl>
-                    <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={status === 'Administrador'}>
-                      {status === 'Administrador' ? <span>Ilimitada</span> : field.value ? format(field.value, "PPP") : <span>Escolha uma data</span>}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </FormControl>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={field.value}
-                    onSelect={field.onChange}
-                    disabled={(date) => {
-                      const isBeforeToday = date < new Date() && date.toDateString() !== new Date().toDateString();
-                      const isAfterMaxValidity = maxValidityDate ? date > maxValidityDate : false;
-                      return isBeforeToday || isAfterMaxValidity;
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="dataValidade"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Data de Validade {maxValidityDate ? <span className="text-xs text-muted-foreground">(Máx: {format(maxValidityDate, 'dd/MM/yyyy')})</span> : <span className="text-xs text-muted-foreground">(Opcional)</span>}</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                        {field.value ? format(field.value, "PPP") : <span>Escolha uma data (Ilimitado se vazio)</span>}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) => {
+                        const isBeforeToday = date < new Date() && date.toDateString() !== new Date().toDateString();
+                        const isAfterMaxValidity = maxValidityDate ? date > maxValidityDate : false;
+                        return isBeforeToday || isAfterMaxValidity;
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="telefone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Telefone</FormLabel>
+                <FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? 'Salvando...' : (<>{isEditMode ? 'Salvar Alterações' : 'Cadastrar Usuário'}</>)}
@@ -388,6 +404,57 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
       </form>
     </Form>
   );
+}
+
+function BotaoMudarSenha({ usuarioIdAlvo }: { usuarioIdAlvo: string }) {
+  const [novaSenha, setNovaSenha] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  const { toast } = useToast()
+
+  const handleTrocarSenha = async () => {
+    if (novaSenha.length < 6) {
+      toast({ title: "Aviso", description: "A senha deve ter no mínimo 6 caracteres!", variant: "destructive" })
+      return
+    }
+    
+    setLoading(true)
+    const resultado = await forcarTrocaDeSenha(usuarioIdAlvo, novaSenha)
+    
+    if (resultado.sucesso) {
+      toast({ title: "Sucesso!", description: resultado.mensagem })
+      setNovaSenha('')
+    } else {
+      toast({ title: "Erro", description: resultado.erro, variant: "destructive" })
+    }
+    setLoading(false)
+  }
+
+  return (
+    <Card className="border-red-200 bg-red-50/50 mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-red-700 flex items-center gap-2 text-base"><Key className="w-4 h-4" /> Forçar Troca de Senha</CardTitle>
+        <CardDescription className="text-xs">Redefine a senha deste usuário imediatamente.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-2 items-center">
+        <Input 
+          type="password" 
+          placeholder="Nova senha (min 6 carac.)"
+          value={novaSenha}
+          onChange={(e) => setNovaSenha(e.target.value)}
+          className="bg-white h-9"
+        />
+        <Button 
+          type="button"
+          onClick={handleTrocarSenha} 
+          disabled={loading || novaSenha.length < 6}
+          variant="destructive"
+          className="h-9 whitespace-nowrap"
+        >
+          {loading ? 'Salvando...' : 'Atualizar'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function UsersPage() {
@@ -480,8 +547,11 @@ export default function UsersPage() {
 
       <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => { if (!isOpen) setSelectedUser(null); setIsEditDialogOpen(isOpen); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Editar Usuário</DialogTitle><DialogDescription>Modifique os dados do usuário abaixo. O e-mail e a senha não podem ser alterados.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Editar Usuário</DialogTitle><DialogDescription>Modifique os dados do usuário abaixo. O e-mail não pode ser alterado.</DialogDescription></DialogHeader>
           <UserForm onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} />
+          {selectedUser && (
+             <BotaoMudarSenha usuarioIdAlvo={selectedUser.id} />
+          )}
         </DialogContent>
       </Dialog>
     </>

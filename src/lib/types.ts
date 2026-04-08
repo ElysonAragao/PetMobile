@@ -1,17 +1,24 @@
-export interface Patient {
+export interface Pet {
   id: string;
-  codPaciente?: string;
-  name: string;
-  email: string;
-  endereco?: string;
-  telefone?: string;
-  cpf: string;
-  dataNascimento?: string;
+  codPet?: string;
+  nome: string;
+  especie: string; // Cão, Gato, etc.
+  raca?: string;
+  sexo?: 'M' | 'F';
   idade?: string;
-  genero?: string;
+  dataNascimento?: string;
+  tutorNome: string;
+  tutorCpf: string;
+  tutorEmail?: string;
+  tutorTelefone?: string;
+  tutorEndereco?: string;
+  tutorCep?: string;
+  tutorBairro?: string;
+  tutorCidade?: string;
+  tutorUf?: string;
   healthPlanCode: string;
   healthPlanName: string;
-  matricula?: string;
+  matricula?: string; // Matrícula do plano pet
 }
 
 export interface Exam {
@@ -25,11 +32,11 @@ export interface Exam {
   healthPlanName?: string | null;
 }
 
-export interface Medico {
+export interface Veterinario {
   id: string;
-  codMed: string;
-  name: string;
-  crm: string;
+  codVet: string;
+  nome: string;
+  crmv: string; // CRM Veterinário
   email: string;
   telefone: string;
 }
@@ -52,9 +59,9 @@ export interface Movimentacao {
 
 
 export interface QrData {
-  patient: Patient;
+  pet: Pet;
   exams: Exam[];
-  medico: Medico;
+  veterinario: Veterinario;
   movimentoId: string;
   data: string;
 }
@@ -65,10 +72,10 @@ export interface Usuario {
   numUsuario: string;
   nome: string;
   cpf?: string;
-  crmUf?: string;
+  crmvUf?: string;
   email: string;
   telefone?: string;
-  status: 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'Medico' | 'Medico Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
+  status: 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
   dataCadastro: string; // ISO string
   dataValidade: string; // YYYY-MM-DD
 }
@@ -80,31 +87,33 @@ export interface Leitura {
   dataLeitura: string;       // ISO string - data/hora da leitura
   usuarioNome: string;       // Nome do usuário que realizou a leitura
   usuarioId: string;         // ID do usuário que realizou a leitura
-  // Dados do paciente no momento da leitura
-  pacienteNome: string;
-  pacienteCpf: string;
-  pacienteTelefone: string;
-  pacienteHealthPlanCode: string;
-  pacienteHealthPlanName: string;
-  pacienteMatricula: string;
-  // Dados do médico
-  medicoNome: string;
-  medicoCrm: string;
+  // Dados do pet no momento da leitura
+  petNome: string;
+  especie: string;
+  raca: string;
+  tutorNome: string;
+  tutorCpf: string;
+  petHealthPlanCode: string;
+  petHealthPlanName: string;
+  petMatricula: string;
+  // Dados do veterinário
+  veterinarioNome: string;
+  veterinarioCrmv: string;
   // Dados dos exames (armazenados como JSON string para flexibilidade)
   exames: { examCode: string; idExame: string; name: string; description: string; type: string }[];
   // Supabase relational columns (snake_case from DB)
   cod_leitura?: string;
   data_leitura?: string;
   metadata?: {
-    pacienteHealthPlanCode?: string;
-    pacienteHealthPlanName?: string;
+    petHealthPlanCode?: string;
+    petHealthPlanName?: string;
     movimentoId?: string;
   };
-  paciente_id?: string;
-  medico_id?: string;
+  pet_id?: string;
+  veterinario_id?: string;
   // Relational join data from Supabase
-  pacientes?: { nome?: string; cpf?: string; telefone?: string; matricula?: string; idade?: string; genero?: string };
-  medicos?: { nome?: string; crm_uf?: string };
+  pets?: { nome?: string; especie?: string; raca?: string; tutor_nome?: string; tutor_cpf?: string; matricula?: string; idade?: string; sexo?: string };
+  veterinarios?: { nome?: string; crmv_uf?: string };
   usuarios?: { nome?: string };
 }
 
