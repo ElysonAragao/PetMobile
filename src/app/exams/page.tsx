@@ -217,7 +217,7 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
 
 function ExamForm({ onFormSubmit, initialData, getNextExamCode }: { onFormSubmit: (values: ExamFormValues) => Promise<any>, initialData?: Partial<ExamFormValues>, getNextExamCode: (type: 'Laboratório' | 'Imagem') => Promise<string> }) {
   const { healthPlans } = useHealthPlans();
-  const nameInputRef = React.useRef<HTMLInputElement>(null);
+  const nameInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const form = useForm<ExamFormValues>({
     resolver: zodResolver(examSchema),
@@ -313,7 +313,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode }: { onFormSubmit
                     {...field} 
                     ref={(e) => {
                       field.ref(e);
-                      nameInputRef.current = e;
+                      if (e) nameInputRef.current = e;
                     }}
                   />
                 </FormControl>
