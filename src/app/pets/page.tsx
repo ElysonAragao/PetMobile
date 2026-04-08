@@ -49,7 +49,7 @@ const petSchema = z.object({
   raca: z.string().optional().or(z.literal('')),
   sexo: z.enum(['M', 'F'], { required_error: "Sexo é obrigatório" }),
   idade: z.string().optional().or(z.literal('')),
-  dataNascimento: z.string().optional().or(z.literal('')),
+  dataNascimento: z.string().optional().or(z.literal('')).nullable(),
   tutorNome: z.string().min(1, "Nome do tutor é obrigatório"),
   tutorCpf: z.string().min(11, "CPF deve ter no mínimo 11 dígitos"),
   tutorEmail: z.string().email("E-mail inválido").or(z.literal('')).optional().default(''),
@@ -144,7 +144,7 @@ function PetForm({
       // Sincronizar manualmente para garantir o visual imediato
       setTimeout(() => {
         form.setValue('especie', especieNorm);
-        form.setValue('sexo', sexoNorm);
+        form.setValue('sexo', sexoNorm as 'M' | 'F');
       }, 0);
     }
   }, [initialData, form, especies]);

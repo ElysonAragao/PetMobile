@@ -87,7 +87,7 @@ export default function ReportsPage() {
     }, [activeTab, movsLoaded, fetchMovimentacoes]);
 
     const uniqueVets = React.useMemo(() => {
-        const names = (users || []).filter(u => u.status === 'MedicoVet' || u.status === 'Veterinário').map(u => u.nome);
+        const names = (users || []).filter(u => u.status === 'MedicoVet' || u.status === 'MedicoVet Geral').map(u => u.nome);
         return [...new Set(names)].sort();
     }, [users]);
 
@@ -155,9 +155,9 @@ export default function ReportsPage() {
     };
 
     const getVetsData = () => {
-        return (users || []).filter(u => u.status === 'MedicoVet' || u.status === 'Veterinário').map(v => ({
+        return (users || []).filter(u => u.status === 'MedicoVet' || u.status === 'MedicoVet Geral').map(v => ({
             "Nome": v.nome,
-            "CRMV/UF": v.crmv_uf || "-",
+            "CRMV/UF": v.crmvUf || "-",
             "E-mail": v.email,
             "Status": "Ativo"
         }));

@@ -33,7 +33,7 @@ import Link from 'next/link';
 interface DecodedGuideData {
   movimentoId: string;
   data: string;
-  pet: Pet;
+  pet: any; // Allow raw DB data
   veterinario: Veterinario;
   exams: Exam[];
 }
@@ -131,11 +131,12 @@ export default function ScanPage() {
     return {
       movimentoId: movData.movimento_id,
       data: movData.data,
-      pet: petDataSB,
+      pet: petDataSB as any,
       veterinario: {
         id: vetDataSB.id,
         nome: vetDataSB.nome,
         crmv: vetDataSB.crmv_uf,
+        email: '',
         telefone: vetDataSB.telefone,
         codVet: vetDataSB.codigo
       },
@@ -168,7 +169,7 @@ export default function ScanPage() {
     };
 
     const result = await addLeitura(leituraInput);
-    return result.success ? result.codLeitura : null;
+    return result.success ? (result.codLeitura || null) : null;
   }, [user, addLeitura]);
 
   const processScannedData = React.useCallback(async (scannedId: string) => {

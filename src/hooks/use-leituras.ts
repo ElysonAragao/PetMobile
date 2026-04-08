@@ -174,5 +174,16 @@ export function useLeituras() {
         }
     }, [supabase, fetchLeituras, selectedEmpresaId]);
 
-    return { leituras, addLeitura, isLoaded: !isLoading, error, fetchLeituras };
+    const deleteLeitura = useCallback(async (leituraId: string) => {
+        try {
+            const { error } = await supabase.from('pet_leituras').delete().eq('id', leituraId);
+            if (error) throw error;
+            setLeituras(prev => prev.filter(l => l.id !== leituraId));
+        } catch (e: any) {
+            console.error('Error deleting leitura:', e);
+            throw e;
+        }
+    }, [supabase]);
+
+    return { leituras, addLeitura, deleteLeitura, isLoaded: !isLoading, error, fetchLeituras };
 }

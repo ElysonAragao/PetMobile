@@ -101,6 +101,9 @@ export interface Leitura {
   veterinarioCrmv: string;
   // Dados dos exames (armazenados como JSON string para flexibilidade)
   exames: { examCode: string; idExame: string; name: string; description: string; type: string }[];
+  // Fallback fields from metadata / legacy
+  pacienteNome?: string;
+  medicoNome?: string;
   // Supabase relational columns (snake_case from DB)
   cod_leitura?: string;
   data_leitura?: string;
