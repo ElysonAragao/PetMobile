@@ -49,6 +49,26 @@ export function useEspecies() {
     }
   };
 
+  const updateEspecie = async (id: string, nome: string) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('pet_especies')
+        .update({ nome: nome.trim() })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setEspecies(prev => prev.map(e => e.id === id ? (data as Especie) : e).sort((a, b) => a.nome.localeCompare(b.nome)));
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const deleteEspecie = async (id: string) => {
     try {
       const { error } = await supabase
@@ -68,5 +88,5 @@ export function useEspecies() {
     fetchEspecies();
   }, [fetchEspecies]);
 
-  return { especies, isLoaded, isLoading, addEspecie, deleteEspecie, refresh: fetchEspecies };
+  return { especies, isLoaded, isLoading, addEspecie, updateEspecie, deleteEspecie, refresh: fetchEspecies };
 }

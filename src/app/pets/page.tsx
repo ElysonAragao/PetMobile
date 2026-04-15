@@ -605,8 +605,10 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
 export default function PetsPage() {
   const { pets, addPet, updatePet, deletePet, findPetByTutorCpf, isLoaded } = usePets();
   const { healthPlans, isLoaded: healthPlansLoaded } = useHealthPlans();
-  const { especies, isLoaded: especiesLoaded, addEspecie, deleteEspecie, isLoading: especiesLoading } = useEspecies();
+  const { especies, isLoaded: especiesLoaded, addEspecie, updateEspecie, deleteEspecie, isLoading: especiesLoading } = useEspecies();
   const [newEspecieNome, setNewEspecieNome] = React.useState('');
+  const [editingEspecieId, setEditingEspecieId] = React.useState<string | null>(null);
+  const [editingEspecieNome, setEditingEspecieNome] = React.useState('');
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -731,7 +733,11 @@ export default function PetsPage() {
             <CardHeader><CardTitle>Cadastro de Espécies</CardTitle><CardDescription>Adicione as espécies de animais que sua clínica atende.</CardDescription></CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-8">
-                <Input placeholder="Nome da Espécie (ex: Hamster, Tartaruga)" value={newEspecieNome} onChange={(e) => setNewEspecieNome(e.target.value)} />
+                <Input 
+                  placeholder="Nome da Espécie (ex: Hamster, Tartaruga)" 
+                  value={newEspecieNome} 
+                  onChange={(e) => setNewEspecieNome(e.target.value)} 
+                />
                 <Button disabled={especiesLoading || !newEspecieNome} onClick={async () => {
                   const res = await addEspecie(newEspecieNome);
                   if (res.success) { toast({ title: "Sucesso!", description: "Espécie adicionada." }); setNewEspecieNome(''); }
@@ -744,8 +750,47 @@ export default function PetsPage() {
                 <TableBody>
                   {especies.map(e => (
                     <TableRow key={e.id}>
-                      <TableCell className="font-medium">{e.nome}</TableCell>
+                      <TableCell className="font-medium">
+                        {editingEspecieId === e.id ? (
+                          <div className="flex gap-2">
+                            <Input 
+                              size={30}
+                              value={editingEspecieNome} 
+                              onChange={(e) => setEditingEspecieNome(e.target.value)}
+                              className="h-8"
+                            />
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-8 px-2 text-green-600"
+                              onClick={async () => {
+                                const res = await updateEspecie(e.id, editingEspecieNome);
+                                if (res.success) {
+                                  toast({ title: "Sucesso", description: "Espécie atualizada." });
+                                  setEditingEspecieId(null);
+                                } else {
+                                  toast({ title: "Erro", description: res.message, variant: "destructive" });
+                                }
+                              }}
+                            >Salvar</Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-8 px-2 text-muted-foreground"
+                              onClick={() => setEditingEspecieId(null)}
+                            >Cancelar</Button>
+                          </div>
+                        ) : e.nome}
+                      </TableCell>
                       <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => {
+                            setEditingEspecieId(e.id);
+                            setEditingEspecieNome(e.nome);
+                          }}
+                        ><Edit className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => deleteEspecie(e.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                       </TableCell>
                     </TableRow>

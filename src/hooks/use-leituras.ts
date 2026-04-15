@@ -48,12 +48,13 @@ export interface LeituraInput {
     pacienteGenero?: string;
     medicoNome: string;
     medicoCrm: string;
+    medicoId?: string; // Add optional direct ID
     exames: { examCode: string; idExame: string; name: string; description: string; type: string }[];
 }
 
 export function useLeituras() {
     const supabase = createClient();
-    const { selectedEmpresaId } = useSession();
+    const { selectedEmpresaId, isLoading: sessionLoading } = useSession();
     const [leituras, setLeituras] = useState<Leitura[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -64,17 +65,7 @@ export function useLeituras() {
             console.log("Relatórios: Buscando leituras para empresa", selectedEmpresaId);
             let query = supabase
                 .from('pet_leituras')
-                .select(`
-                    id,
-                    cod_leitura,
-                    data_leitura,
-                    metadata,
-                    pet_id,
-                    medico_id,
-                    pets:pet_pets!pet_id (nome, tutor_nome, tutor_telefone, matricula, idade, sexo),
-                    medicos:pet_usuarios!medico_id (nome, crmv_uf),
-                    usuarios:pet_usuarios!usuario_id (nome)
-                `);
+                .select('*');
 
             if (selectedEmpresaId) {
                 query = query.eq('empresa_id', selectedEmpresaId);
@@ -94,8 +85,10 @@ export function useLeituras() {
     }, [supabase, selectedEmpresaId]);
 
     useEffect(() => {
-        if (selectedEmpresaId) fetchLeituras();
-    }, [fetchLeituras, selectedEmpresaId]);
+        if (!sessionLoading) {
+            fetchLeituras();
+        }
+    }, [fetchLeituras, sessionLoading]);
 
     const addLeitura = useCallback(async (leituraData: LeituraInput): Promise<{ success: boolean; message?: string; codLeitura?: string }> => {
         try {
@@ -113,8 +106,8 @@ export function useLeituras() {
                 if (pData && pData.length > 0) petId = pData[0].id;
             }
 
-            let medicoId = null;
-            if (leituraData.medicoCrm) {
+            let medicoId = leituraData.medicoId;
+            if (!medicoId && leituraData.medicoCrm) {
                 const { data: mData } = await supabase.from('pet_usuarios').select('id').eq('crmv_uf', leituraData.medicoCrm).limit(1);
                 if (mData && mData.length > 0) medicoId = mData[0].id;
             }
@@ -127,7 +120,7 @@ export function useLeituras() {
             const insertPayload = {
                 empresa_id: selectedEmpresaId,
                 usuario_id: usuarioId || leituraData.usuarioId,
-                pet_id: petId,
+                paciente_id: petId,
                 medico_id: medicoId,
                 cod_leitura: nextCode,
                 data_leitura: leituraData.dataLeitura,
@@ -139,7 +132,8 @@ export function useLeituras() {
                     pacienteGenero: leituraData.pacienteGenero,
                     movimentoId: leituraData.movimentoId,
                     pacienteNome: leituraData.pacienteNome,
-                    medicoNome: leituraData.medicoNome
+                    medicoNome: leituraData.medicoNome,
+                    exames: leituraData.exames || []
                 }
             };
 
@@ -150,21 +144,6 @@ export function useLeituras() {
                 .single();
 
             if (insertError) throw insertError;
-
-            if (leituraData.exames && leituraData.exames.length > 0) {
-                const examLinks = [];
-                for (const ex of leituraData.exames) {
-                    const { data: eData } = await supabase.from('pet_exames').select('id').eq('codigo', ex.examCode || ex.idExame).limit(1);
-                    if (eData && eData.length > 0) {
-                        examLinks.push({
-                            leitura_id: novaLeitura.id,
-                            exame_id: eData[0].id,
-                            empresa_id: selectedEmpresaId
-                        });
-                    }
-                }
-                if (examLinks.length > 0) await supabase.from('pet_leitura_exames').insert(examLinks);
-            }
 
             fetchLeituras();
             return { success: true, codLeitura: nextCode };

@@ -4,6 +4,18 @@ Este documento registra as melhorias, migrações e personalizações realizadas
 
 ---
 
+## [2026-04-12] - O Grande Sincronismo Estrutural e Leitura Inteligente (OCR avançado)
+
+### 🧹 Varredura e Limpeza Estrutural do Banco (Dívida Técnica)
+- **Eliminação de Constraints Fantasmas**: Identificamos e deletamos chaves estrangeiras (`Foreign Keys`) antigas e minúsculas no Supabase (ex: `leituras_paciente_id_fkey`) que apontavam para tabelas extintas (`pacientes`, `usuarios`), travando o fluxo de inserção de dados. O banco agora roda liso e aponta exclusivamente para as tabelas `pet_pets`, `pet_usuarios` etc.
+- **Redirecionamento de JSON das Leituras**: Removemos a tabela ilusória `pet_leitura_exames` do código-fonte e convertemos a persistência dos exames na leitura (Scan) para o campo nativo e flexível `metadata` da própria tabela `pet_leituras`, evitando overhead estrutural.
+
+### 🤖 OCR e Inteligência Artificial (Paridade com PacienteMobile)
+- **Extrator NATIVO de PDF**: Importamos do PacienteMobile a incrível lógica de renderização injetada via CDN do `pdf.js`. O PetMobile agora volta a "engolir" solicitações em PDF nativamente sem precisar de conversões manuais e nem estourar as dependências do servidor.
+- **Lupa Flexível de Busca (Fuse.js)**: Ajustamos a elasticidade da busca dos Exames Lidos (`threshold: 0.6`). O algoritmo de IA (Tesseract) agora "limpa" os caracteres das imagens (tirando acentos, hífens) e busca palavra por palavra, achando caixinhas de exames que antes passavam ilesas por erro de caligrafia (ou borrão na foto JPG).
+- **UX de Segurança na Recepção**: A Leitura Inteligente e a "Digitar Manualmente" agora exigem estritamente a escolha prévia de PET e VETERINÁRIO antes do upload de documentos, impossibilitando a existência de "dados soltos" sem tutor no banco.
+
+---
 ## [2026-04-08] - Finalização dos Relatórios e Padronização de IDs (G, R, L)
 
 ### 📊 Relatórios e Visibilidade de Dados

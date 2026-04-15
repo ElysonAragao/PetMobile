@@ -92,10 +92,62 @@ export function useMovement() {
                     data: dataHora,
                     empresa_id: selectedEmpresaId
                 })
-                .select('movimento_id')
+                .select('id, movimento_id')
                 .maybeSingle();
 
             if (insertError) throw insertError;
+            
+            // --- INÍCIO: FATURAMENTO E PREÇOS ---
+            try {
+               // 1. Descobrir plano_id do pet
+               const { data: petData } = await supabase.from('pet_pets').select('health_plan_code').eq('id', petId).maybeSingle();
+               let uuidPlanoId = null;
+               
+               if (petData?.health_plan_code) {
+                   const { data: planoData } = await supabase.from('pet_planos_saude').select('id').eq('ans_code', petData.health_plan_code).maybeSingle();
+                   if (planoData?.id) {
+                       uuidPlanoId = planoData.id;
+                   }
+               }
+               
+               // 2. Para cada exameId, descobrir preço e registrar
+               if (data?.id && exameIds.length > 0) {
+                   const faturamentos = [];
+                   for (const exameId of exameIds) {
+                       let precoAplicado = 0;
+                       if (uuidPlanoId) {
+                           const { data: precoData } = await supabase
+                             .from('pet_precos_exames')
+                             .select('preco_atual')
+                             .eq('plano_id', uuidPlanoId)
+                             .eq('exame_id', exameId)
+                             .maybeSingle();
+                           
+                           if (precoData) precoAplicado = Number(precoData.preco_atual);
+                       }
+                       
+                       faturamentos.push({
+                           movimento_id: data.id,
+                           medicovet_id: veterinarioId,
+                           empresa_id: selectedEmpresaId,
+                           plano_id: uuidPlanoId,
+                           exame_id: exameId,
+                           preco_aplicado: precoAplicado,
+                           data_faturamento: dataHora
+                       });
+                   }
+                   
+                   if (faturamentos.length > 0) {
+                       const { error: faturamentoError } = await supabase.from('pet_faturamento').insert(faturamentos);
+                       if (faturamentoError) {
+                          console.error("DEBUG: Erro ao gerar faturamento:", faturamentoError);
+                       }
+                   }
+               }
+            } catch (fatErr) {
+               console.error("DEBUG: Falha silenciosa no Faturamento:", fatErr);
+            }
+            // --- FIM: FATURAMENTO E PREÇOS ---
             
             return { success: true, movimentoId: data?.movimento_id };
 

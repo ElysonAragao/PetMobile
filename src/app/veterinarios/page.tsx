@@ -233,7 +233,10 @@ export default function VeterinariosPage() {
               <FormField control={form.control} name="telefone" render={({ field }) => (
                 <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
-              <Button type="submit">Salvar Alterações</Button>
+              <div className="flex flex-col md:flex-row gap-3">
+                <Button type="submit">Salvar Alterações</Button>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Voltar</Button>
+              </div>
             </form>
           </Form>
         </DialogContent>

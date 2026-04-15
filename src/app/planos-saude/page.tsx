@@ -182,7 +182,7 @@ function HealthPlanList({ plans, isLoaded, onEdit, onDelete }: { plans: HealthPl
   );
 }
 
-function HealthPlanForm({ onFormSubmit, initialData, getNextHealthPlanCode }: { onFormSubmit: (values: HealthPlanFormValues) => Promise<any>, initialData?: Partial<HealthPlanFormValues>, getNextHealthPlanCode: () => Promise<string> }) {
+function HealthPlanForm({ onFormSubmit, initialData, getNextHealthPlanCode, onCancel }: { onFormSubmit: (values: HealthPlanFormValues) => Promise<any>, initialData?: Partial<HealthPlanFormValues>, getNextHealthPlanCode: () => Promise<string>, onCancel?: () => void }) {
   const form = useForm<HealthPlanFormValues>({
     resolver: zodResolver(healthPlanSchema),
     defaultValues: initialData || { codPlano: "", idPlano: "", nome: "" },
@@ -251,14 +251,21 @@ function HealthPlanForm({ onFormSubmit, initialData, getNextHealthPlanCode }: { 
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? 'Salvando...' : (
-            <>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              {initialData?.nome ? 'Salvar Alterações' : 'Cadastrar Plano'}
-            </>
+        <div className="flex flex-col md:flex-row gap-3">
+          <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? 'Salvando...' : (
+              <>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                {initialData?.nome ? 'Salvar Alterações' : 'Cadastrar Plano'}
+              </>
+            )}
+          </Button>
+          {onCancel && (
+            <Button type="button" variant="outline" className="w-full md:w-auto" onClick={onCancel}>
+              Voltar
+            </Button>
           )}
-        </Button>
+        </div>
       </form>
     </Form>
   );
@@ -374,7 +381,7 @@ export default function HealthPlansPage() {
               Modifique os dados do plano abaixo. O código não pode ser alterado.
             </DialogDescription>
           </DialogHeader>
-          <HealthPlanForm onFormSubmit={handleUpdatePlan} initialData={selectedPlan ?? undefined} getNextHealthPlanCode={getNextHealthPlanCode} />
+          <HealthPlanForm onFormSubmit={handleUpdatePlan} initialData={selectedPlan ?? undefined} getNextHealthPlanCode={getNextHealthPlanCode} onCancel={() => setIsEditDialogOpen(false)} />
         </DialogContent>
       </Dialog>
     </>

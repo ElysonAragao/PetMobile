@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { QrCode, Send, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2 } from 'lucide-react';
+import { QrCode, Send, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { 
     AlertDialog, 
     AlertDialogAction, 
@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import useLocalStorage from '@/hooks/use-local-storage';
+import { Badge } from '@/components/ui/badge';
 
 import { Pet, Veterinario, Exam } from '@/lib/types';
 import { usePets } from '@/hooks/use-pets';
@@ -92,6 +93,7 @@ function MovementContent() {
     const [petSearch, setPetSearch] = React.useState('');
     const [vetSearch, setVetSearch] = React.useState('');
     const [examSearch, setExamSearch] = React.useState('');
+    const [urgencyFilter, setUrgencyFilter] = React.useState(false);
     const [resetCounter, setResetCounter] = React.useState(0);
     const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
@@ -153,13 +155,18 @@ function MovementContent() {
                 e.healthPlanName.trim().toLowerCase() === currentPet.healthPlanName.trim().toLowerCase()
             );
         }
+
+        if (urgencyFilter) {
+            baseExams = baseExams.filter(e => e.isUrgency);
+        }
+
         if (!examSearch) return baseExams;
         const searchLower = examSearch.toLowerCase();
         return baseExams.filter(e =>
             e.name.toLowerCase().includes(searchLower) ||
             (e.idExame && e.idExame.toLowerCase().includes(searchLower))
         );
-    }, [exams, examSearch, currentPet]);
+    }, [exams, examSearch, currentPet, urgencyFilter]);
 
     // Auto-seleção de veterinário logado
     React.useEffect(() => {
@@ -357,7 +364,22 @@ function MovementContent() {
                                         <FormItem>
                                             <FormLabel>Exames Solicitados</FormLabel>
                                             <div className="space-y-2">
-                                                <Input placeholder="Buscar exame..." value={examSearch} onChange={(e) => setExamSearch(e.target.value)} />
+                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                    <div className="relative flex-1">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                        <Input placeholder="Buscar exame..." value={examSearch} onChange={(e) => setExamSearch(e.target.value)} className="pl-10" />
+                                                    </div>
+                                                    <Button 
+                                                        type="button" 
+                                                        variant={urgencyFilter ? "destructive" : "outline"} 
+                                                        size="sm"
+                                                        onClick={() => setUrgencyFilter(!urgencyFilter)}
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <AlertTriangle className={urgencyFilter ? "animate-pulse" : "h-4 w-4"} size={16} />
+                                                        {urgencyFilter ? "Apenas Urgentes" : "Filtrar Urgentes"}
+                                                    </Button>
+                                                </div>
                                                 <ScrollArea className="h-48 w-full rounded-md border p-4">
                                                     <div className="space-y-3">
                                                         {filteredExams.map((item) => (
@@ -367,8 +389,9 @@ function MovementContent() {
                                                                     checked={field.value?.includes(item.id)} 
                                                                     onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value.filter(v => v !== item.id))}
                                                                 />
-                                                                <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer">
+                                                                <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2">
                                                                     <span className="font-mono text-primary font-bold">{item.idExame || item.examCode}</span> — {item.name}
+                                                                    {item.isUrgency && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px] h-5 px-1 py-0">URGENTE</Badge>}
                                                                 </label>
                                                             </div>
                                                         ))}
@@ -412,7 +435,22 @@ function MovementContent() {
                                 <div className="space-y-3 text-sm border p-4 rounded-md">
                                     <p><strong>PET:</strong> {generatedGuide.pet.nome}</p>
                                     <p><strong>VETERINÁRIO:</strong> {generatedGuide.veterinario.nome}</p>
-                                    <p><strong>EXAMES:</strong> {generatedGuide.exams.map(e => `${e.idExame || e.examCode} - ${e.name}`).join(', ')}</p>
+                                    
+                                    <Separator className="my-2" />
+                                    
+                                    {generatedGuide.exams.filter(e => !e.isUrgency).length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Exames Normais ({generatedGuide.exams.filter(e => !e.isUrgency).length})</p>
+                                            <p className="text-sm">{generatedGuide.exams.filter(e => !e.isUrgency).map(e => `${e.idExame || e.examCode} - ${e.name}`).join(', ')}</p>
+                                        </div>
+                                    )}
+
+                                    {generatedGuide.exams.filter(e => e.isUrgency).length > 0 && (
+                                        <div className="space-y-1 mt-2">
+                                            <p className="text-xs font-bold text-red-600 uppercase tracking-wider flex items-center gap-1">Exames de Urgência ({generatedGuide.exams.filter(e => e.isUrgency).length}) 🚨</p>
+                                            <p className="text-sm font-medium text-red-900 bg-red-50 p-1 rounded border border-red-100">{generatedGuide.exams.filter(e => e.isUrgency).map(e => `${e.idExame || e.examCode} - ${e.name}`).join(', ')}</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <Alert><Info className="h-4 w-4" /><AlertTitle>Dica de Envio</AlertTitle><AlertDescription>Ao clicar em Imprimir, escolha "Salvar como PDF" para enviar por WhatsApp ou E-mail.</AlertDescription></Alert>
                             </>

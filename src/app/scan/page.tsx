@@ -51,6 +51,7 @@ export default function ScanPage() {
   const [codLeitura, setCodLeitura] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
   // Manual Input States
   const [isManualModalOpen, setIsManualModalOpen] = React.useState(false);
@@ -144,7 +145,7 @@ export default function ScanPage() {
     };
   }, [supabase]);
 
-  const saveLeitura = React.useCallback(async (data: DecodedGuideData): Promise<string | null> => {
+  const saveLeitura = React.useCallback(async (data: DecodedGuideData): Promise<{ success: boolean; codLeitura?: string; message?: string } | null> => {
     if (!user) return null;
 
     const leituraInput: LeituraInput = {
@@ -159,6 +160,7 @@ export default function ScanPage() {
       pacienteIdade: data.pet.idade || '',
       medicoNome: data.veterinario.nome,
       medicoCrm: data.veterinario.crmv,
+      medicoId: data.veterinario.id,
       exames: data.exams.map(e => ({
         examCode: e.examCode,
         idExame: e.idExame || e.examCode,
@@ -168,8 +170,7 @@ export default function ScanPage() {
       })),
     };
 
-    const result = await addLeitura(leituraInput);
-    return result.success ? (result.codLeitura || null) : null;
+    return await addLeitura(leituraInput);
   }, [user, addLeitura]);
 
   const processScannedData = React.useCallback(async (scannedId: string) => {
@@ -181,10 +182,16 @@ export default function ScanPage() {
       const fullData = await fetchGuiaData(scannedId);
       setDecodedData(fullData);
 
-      const codigo = await saveLeitura(fullData);
-      if (codigo) {
-        setCodLeitura(codigo);
-        toast({ title: "Leitura Registrada!", description: `Guia registrada com sucesso (Cód: ${codigo})` });
+      const result: any = await saveLeitura(fullData);
+      
+      if (!result || !result.success) {
+        throw new Error(result?.message || "Erro desconhecido ao registrar leitura.");
+      }
+
+      if (result.codLeitura) {
+        setCodLeitura(result.codLeitura);
+        toast({ title: "Leitura Registrada!", description: `Guia registrada com sucesso (Cód: ${result.codLeitura})` });
+        // setShowSuccessDialog(true); // Removido para não atrapalhar o clique em Gerar PDF
       }
     } catch (e: any) {
       setError(e.message || "Erro ao processar.");
@@ -264,6 +271,13 @@ export default function ScanPage() {
       const result = await createMovimento(manualPetId, manualVetId, manualExamIds);
       if (result.success && result.movimentoId) {
         setIsManualModalOpen(false);
+        setManualPetId('');
+        setManualVetId('');
+        setManualExamIds([]);
+        setManualPetSearch('');
+        setManualVetSearch('');
+        setManualExamSearch('');
+        if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
         await processScannedData(result.movimentoId);
       } else {
         toast({ title: "Erro ao criar guia", description: result.message, variant: "destructive" });
@@ -284,31 +298,111 @@ export default function ScanPage() {
     setOcrStatusText('Iniciando análise inteligente (IA)...');
     
     try {
-      const { data: { text } } = await Tesseract.recognize(file, 'por', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            setOcrProgress(Math.floor(m.progress * 100));
-            setOcrStatusText('Lendo texto da guia...');
-          }
+      let extractedText = '';
+
+      if (file.type === 'application/pdf') {
+        setOcrStatusText('Lendo documento PDF original...');
+        if (!(window as any).pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.onload = () => {
+              (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+              resolve(true);
+            };
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
         }
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfLib = (window as any).pdfjsLib;
+        const pdf = await pdfLib.getDocument({ data: arrayBuffer }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          extractedText += content.items.map((item: any) => item.str).join(' ') + '\n';
+        }
+        
+      } else if (file.type === 'text/plain') {
+        setOcrStatusText('Lendo conteúdo do arquivo de texto...');
+        extractedText = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsText(file);
+        });
+
+      } else if (file.type.startsWith('image/')) {
+        setOcrStatusText('Iniciando análise inteligente da imagem...');
+        const { data: { text } } = await Tesseract.recognize(file, 'por', {
+           logger: m => {
+              if (m.status === 'recognizing text') {
+                 setOcrProgress(Math.floor(m.progress * 100));
+                 setOcrStatusText('Lendo texto da guia...');
+              } else {
+                 setOcrStatusText('Afinando motor visual...');
+              }
+           }
+        });
+        extractedText = text;
+      } else {
+        throw new Error("Formato de arquivo não suportado.");
+      }
+      
+      setOcrStatusText('Procurando exames correspondentes...');
+
+      const fuse = new Fuse(exams, {
+        keys: [
+          { name: 'name', weight: 0.7 },
+          { name: 'examCode', weight: 1.0 },
+          { name: 'idExame', weight: 1.0 }
+        ],
+        threshold: 0.35,
+        includeScore: true,
+        ignoreLocation: true,
       });
       
-      const fuse = new Fuse(exams, { keys: ['name', 'examCode', 'idExame'], threshold: 0.5 });
-      const matchedIds = new Set<string>();
-      text.split('\n').forEach(line => {
+      const matchedExamIds = new Set<string>();
+      
+      const cleanText = extractedText
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .replace(/\s*[\u2013\u2014]\s*/g, " - ")
+        .replace(/\s{2,}/g, " ");
+        
+      const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+      
+      lines.forEach(line => {
         const results = fuse.search(line);
-        if (results.length > 0 && results[0].score! < 0.45) matchedIds.add(results[0].item.id);
+        if (results.length > 0 && results[0].score !== undefined && results[0].score < 0.35) {
+           matchedExamIds.add(results[0].item.id);
+        }
+        
+        const words = line.split(/[\s,;\-]+/).filter(w => w.length >= 3);
+        words.forEach(word => {
+            const wordResults = fuse.search(word);
+            if (wordResults.length > 0 && wordResults[0].score !== undefined) {
+               const isPotentialCode = /^\d+$/.test(word) || (word.length <= 6 && /[0-9]/.test(word));
+               const strictThreshold = isPotentialCode ? 0.1 : 0.3;
+               
+               if (wordResults[0].score < strictThreshold) {
+                  matchedExamIds.add(wordResults[0].item.id);
+               }
+            }
+        });
       });
 
-      if (matchedIds.size > 0) {
-        setManualExamIds(Array.from(matchedIds));
-        toast({ title: "Motor de IA Concluído", description: `${matchedIds.size} exames detectados.` });
+      if (matchedExamIds.size > 0) {
+        setManualExamIds(Array.from(matchedExamIds));
+        toast({ title: "Leitura Concluída", description: `Encontramos ${matchedExamIds.size} possível(is) exame(s). Audite a seleção.` });
       } else {
-        toast({ title: "Aviso", description: "IA leu a imagem mas não encontrou exames cadastrados." });
+        toast({ title: "Aviso", description: "O sistema leu a imagem/PDF, mas não detectou nomes iguais aos seus códigos." });
       }
       setIsManualModalOpen(true);
-    } catch (err) {
-      toast({ title: "Erro na IA", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Aviso do Sistema", description: err.message || "Erro na IA ao tentar ler o arquivo.", variant: "destructive" });
     } finally {
       setIsOcrProcessing(false);
       setOcrProgress(0);
@@ -359,11 +453,18 @@ export default function ScanPage() {
             <div className="pt-4 space-y-4">
               <p className="text-xs font-medium text-muted-foreground">Leitura Inteligente (PDF/TXT e Imagem) e Digitação:</p>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => setIsManualModalOpen(true)} className="h-12 bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" variant="outline">
+                <Button onClick={() => { 
+                  setManualPetId(''); setManualVetId(''); setManualExamIds([]); setManualPetSearch(''); setManualVetSearch(''); setManualExamSearch('');
+                  setIsManualModalOpen(true); 
+                }} className="h-12 bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" variant="outline">
                   <Edit className="mr-2 h-5 w-5" /> Digitar Manualmente
                 </Button>
-                <Button onClick={() => ocrFileInputRef.current?.click()} className="h-12 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md" disabled={isOcrProcessing}>
-                  {isOcrProcessing ? <Loader2 className="h-5 w-5 animate-spin"/> : <Sparkles className="mr-2 h-5 w-5" />}
+                <Button onClick={() => { 
+                  setManualPetId(''); setManualVetId(''); setManualExamIds([]); setManualPetSearch(''); setManualVetSearch(''); setManualExamSearch('');
+                  if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
+                  setIsManualModalOpen(true); 
+                }} className="h-12 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                  <Sparkles className="mr-2 h-5 w-5" />
                   Leitura Inteligente
                 </Button>
               </div>
@@ -425,13 +526,80 @@ export default function ScanPage() {
 
           {decodedData && (
             <div className="p-4 bg-slate-50 border-t space-y-3">
-              <Button onClick={() => window.open(`/print/${decodedData.movimentoId}?origin=scan`, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 shadow-md">
+              <Button onClick={() => window.open(`/print/${decodedData.movimentoId}?origin=scan&codLeitura=${codLeitura || ''}`, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 shadow-md">
                 <Printer className="mr-2 h-4 w-4" /> Gerar PDF de leitura
               </Button>
-              <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" size="sm" className="text-[10px]"><FileJson className="mr-1 w-3 h-3"/> JSON</Button>
-                <Button variant="outline" size="sm" className="text-[10px]"><FileCode className="mr-1 w-3 h-3"/> XML</Button>
-                <Button variant="outline" size="sm" className="text-[10px]"><FileType className="mr-1 w-3 h-3"/> TXT</Button>
+              <div className="grid grid-cols-3 shadow-sm border rounded-lg overflow-hidden">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="rounded-none border-r hover:bg-slate-100 py-6 h-auto flex flex-col gap-1"
+                  onClick={() => {
+                    const data = {
+                      "Cód_Leitura": codLeitura,
+                      "Data_Leitura": new Date().toLocaleDateString('pt-BR'),
+                      "Referente_a": decodedData.movimentoId,
+                      "Paciente": decodedData.pet.nome,
+                      "Tutor": decodedData.pet.tutor_nome,
+                      "Veterinario_Responsavel": decodedData.veterinario.nome,
+                      "Exames_Solicitados": decodedData.exams.map((e: any) => `${e.idExame || e.examCode} - ${e.name}`)
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Leitura_${codLeitura || 'JSON'}.json`;
+                    a.click();
+                  }}
+                >
+                  <FileJson className="h-5 w-5 text-amber-600" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">JSON</span>
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="rounded-none border-r hover:bg-slate-100 py-6 h-auto flex flex-col gap-1"
+                  onClick={() => {
+                    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Leitura>
+  <Cod_Leitura>${codLeitura}</Cod_Leitura>
+  <Data_Leitura>${new Date().toLocaleDateString('pt-BR')}</Data_Leitura>
+  <Referente_a>${decodedData.movimentoId}</Referente_a>
+  <Paciente>${decodedData.pet.nome}</Paciente>
+  <Tutor>${decodedData.pet.tutor_nome || ''}</Tutor>
+  <Veterinario_Responsavel>${decodedData.veterinario.nome}</Veterinario_Responsavel>
+  <Exames_Solicitados>
+${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e.name}</Exame>`).join('\n')}
+  </Exames_Solicitados>
+</Leitura>`;
+                    const blob = new Blob([xml], { type: 'application/xml' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Leitura_${codLeitura || 'XML'}.xml`;
+                    a.click();
+                  }}
+                >
+                  <FileCode className="h-5 w-5 text-blue-600" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">XML</span>
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="rounded-none hover:bg-slate-100 py-6 h-auto flex flex-col gap-1"
+                  onClick={() => {
+                    const txt = `Cód_Leitura: ${codLeitura} - Data Leitura: ${new Date().toLocaleDateString('pt-BR')}\nReferente a: ${decodedData.movimentoId}\n\nPaciente: ${decodedData.pet.nome}\nTutor: ${decodedData.pet.tutor_nome || ''}\nVeterinário: ${decodedData.veterinario.nome}\nExames:\n${decodedData.exams.map((e: any) => `- ${e.idExame || e.examCode} - ${e.name}`).join('\n')}`;
+                    const blob = new Blob([txt], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Leitura_${codLeitura || 'TXT'}.txt`;
+                    a.click();
+                  }}
+                >
+                  <FileType className="h-5 w-5 text-gray-600" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">TXT</span>
+                </Button>
               </div>
             </div>
           )}
@@ -474,6 +642,28 @@ export default function ScanPage() {
 
             <Separator />
 
+            {/* LEITURA INTELIGENTE (UPLOAD) */}
+            <div className={`p-4 rounded-lg border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${manualPetId && manualVetId ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+               <div className="text-sm">
+                  <span className="font-bold flex items-center gap-1"><Sparkles className="w-4 h-4 text-indigo-600"/> Leitura Inteligente (Recepção)</span>
+                  <p className="text-slate-600 mt-1">
+                     {!manualPetId || !manualVetId 
+                        ? 'Selecione o Pet e o Veterinário Acima para liberar o envio do arquivo.'
+                        : 'Importe o PDF, Imagem ou TXT para a IA processar os exames.'}
+                  </p>
+               </div>
+               <Button 
+                onClick={() => ocrFileInputRef.current?.click()} 
+                disabled={!manualPetId || !manualVetId || isOcrProcessing}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto shadow-sm"
+               >
+                 {isOcrProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileType className="mr-2 h-4 w-4" />}
+                 Selecionar Arquivo
+               </Button>
+            </div>
+
+            <Separator />
+
             {/* EXAMES */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -509,6 +699,31 @@ export default function ScanPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Diálogo de Ação Concluída */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="bg-green-100 p-1.5 rounded-full">
+                <FileCheck2 className="h-5 w-5 text-green-600" />
+              </div>
+              Ação Concluída
+            </DialogTitle>
+            <DialogDescription className="py-2 text-base text-slate-600">
+              Sua leitura foi registrada com sucesso. Deseja realizar a leitura de uma nova guia agora?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:justify-between items-center gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowSuccessDialog(false)} className="flex-1">
+              Não, manter nesta tela
+            </Button>
+            <Button onClick={() => { setShowSuccessDialog(false); setDecodedData(null); setCodLeitura(null); startCameraStream(facingMode); }} className="bg-indigo-600 hover:bg-indigo-700 flex-1 text-white shadow-md">
+              Sim, Nova Leitura
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </>
   );
 }

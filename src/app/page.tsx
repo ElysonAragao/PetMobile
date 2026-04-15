@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield } from 'lucide-react';
+import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
@@ -89,6 +89,13 @@ function HomeContent() {
       href: '/scan',
       icon: <Scan className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor', 'Leitor Geral'],
+    },
+    {
+      title: 'Leituras Realizadas',
+      description: 'Histórico de leituras e atendimentos veterinários.',
+      href: '/leituras',
+      icon: <BookOpen className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor', 'Leitor Geral', 'Relatórios'],
     },
 
     {

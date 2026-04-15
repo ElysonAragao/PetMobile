@@ -15,6 +15,7 @@ const examSchema = z.object({
     type: z.enum(['Laboratório', 'Imagem'], { required_error: "Tipo de exame é obrigatório" }),
     healthPlanId: z.string().optional().nullable(),
     healthPlanName: z.string().optional().nullable(),
+    isUrgency: z.boolean().optional().default(false),
 });
 
 export type ExamFormValues = z.infer<typeof examSchema>;
@@ -91,7 +92,8 @@ export function useExams() {
                 examCode: row.codigo, // The system's internal seq code
                 idExame: row.id_exame || '', // The custom idExame from the company
                 healthPlanId: row.plano_saude_id,
-                healthPlanName: row.health_plan_name
+                healthPlanName: row.health_plan_name,
+                isUrgency: row.is_urgency || false
             }));
  
             console.log(`Exames carregados: ${mappedData.length}`);
@@ -129,7 +131,8 @@ export function useExams() {
                 id_exame: examData.idExame?.trim() || nextCode, // Assume custom ID or fallback to sequential
                 plano_saude_id: examData.healthPlanId || null,
                 health_plan_name: examData.healthPlanName || null,
-                empresa_id: selectedEmpresaId
+                empresa_id: selectedEmpresaId,
+                is_urgency: examData.isUrgency || false
             };
 
             const { data, error: insertError } = await supabase
@@ -166,6 +169,9 @@ export function useExams() {
             }
             if (examData.healthPlanName !== undefined) {
                 dataToUpdate.health_plan_name = examData.healthPlanName || null;
+            }
+            if (examData.isUrgency !== undefined) {
+                dataToUpdate.is_urgency = examData.isUrgency;
             }
             // examCode and type are not updatable by design
 

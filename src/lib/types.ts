@@ -30,6 +30,7 @@ export interface Exam {
   type: 'Laboratório' | 'Imagem';
   healthPlanId?: string | null;
   healthPlanName?: string | null;
+  isUrgency?: boolean;
 }
 
 export interface Veterinario {
@@ -112,7 +113,7 @@ export interface Leitura {
     petHealthPlanName?: string;
     movimentoId?: string;
   };
-  pet_id?: string;
+  paciente_id?: string;
   veterinario_id?: string;
   // Relational join data from Supabase
   pets?: { nome?: string; especie?: string; raca?: string; tutor_nome?: string; tutor_cpf?: string; matricula?: string; idade?: string; sexo?: string };
