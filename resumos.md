@@ -1,5 +1,23 @@
 # Resumo de Alterações - PetMobile
 
+---
+
+## [2026-04-15] - Inteligência de Faturamento e Refinamento de Documentos
+
+### 📊 Visibilidade Financeira e KPIs nos Relatórios
+- **Cabeçalhos de Totais Consolidados**: Adicionamos painéis de KPIs (**Total Período**, **Qtd. Exames** e **Contagem de Atendimentos**) em todas as abas críticas de auditoria: 
+    - **Guias Emitidas**: Agora exibe o valor potencial de faturamento do período.
+    - **Leituras Realizadas**: Mostra o valor real processado.
+    - **Faturamento**: Os cartões agora são fixos e universais, eliminando a dependência de filtros manuais para visualização dos totais.
+- **Cálculo Dinâmico Multi-Fonte**: O sistema agora cruza dados de leituras com a tabela de faturamento em tempo real para garantir que os valores monetários apareçam mesmo em abas de simples histórico.
+
+### 📄 Refinamento da Visualização de Leituras (Doc View)
+- **Correção de Identidade de Documentos**: Resolvemos a falha onde o ícone de "olho" nas Leituras Realizadas abria o título genérico de "Guia". Agora o documento é corretamente identificado como **Comprovante de Leitura de Exames**.
+- **Exposição de Metadados Críticos**: O **Código da Leitura** (ex: `LPet...`) e a **Data Real da Leitura** agora são exibidos com destaque no cabeçalho do documento, garantindo paridade total entre o histórico digital e o documento impresso.
+
+### ☁️ Sincronização e Deploy
+- **Git Sync**: Consolidação e envio de todas as melhorias acumuladas para o repositório oficial no GitHub.
+
 Este documento registra as melhorias, migrações e personalizações realizadas no projeto PetMobile para diferenciá-lo e evoluí-lo em relação à base original do PacienteMobile.
 
 ---
