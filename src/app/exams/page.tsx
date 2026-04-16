@@ -4,13 +4,14 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FileText, FileX, PlusCircle, Trash2, Edit, ArrowUpDown, Beaker, Scan, AlertTriangle, Undo2, Upload, DollarSign, CheckCircle2, Info } from 'lucide-react';
+import { FileText, FileX, PlusCircle, Trash2, Edit, ArrowUpDown, Beaker, Scan, AlertTriangle, Undo2, Upload, DollarSign, CheckCircle2, Info, Download } from 'lucide-react';
 import Link from 'next/link';
 
 import { Exam } from '@/lib/types';
 import { useExams, ExamFormValues } from '@/hooks/use-exams';
 import { useHealthPlans } from '@/hooks/use-health-plans';
 import { usePrecos } from '@/hooks/use-precos';
+import { exportToCSV } from '@/lib/export-utils';
 import { format } from 'date-fns';
 import { PageTitle } from '@/components/layout/page-title';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -119,9 +120,41 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Exames Cadastrados</CardTitle>
-        <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
+        <div>
+          <CardTitle>Exames Cadastrados</CardTitle>
+          <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const exportData = exams.map(e => ({
+              'Nome_Exame': e.name,
+              'Tipo': e.type,
+              'Descricao': e.description,
+              'ID_Exame': e.idExame || '',
+              'Plano_Saude': e.healthPlanName || 'Particular',
+              'Urgente': e.isUrgency ? 'Sim' : 'Não',
+              'Codigo_Sequencial': e.examCode || ''
+            }));
+            
+            const dataToExport = exportData.length > 0 ? exportData : [{
+              'Nome_Exame': 'Ex: Hemograma',
+              'Tipo': 'Laboratório',
+              'Descricao': 'Coleta de sangue...',
+              'ID_Exame': 'LAB001',
+              'Plano_Saude': 'Todos',
+              'Urgente': 'Não',
+              'Codigo_Sequencial': 'EX00001'
+            }];
+            
+            exportToCSV('modelo_importacao_exames', dataToExport);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Exportar CSV (Modelo)
+        </Button>
       </CardHeader>
       <CardContent>
         {sortedExams.length > 0 ? (
@@ -695,6 +728,50 @@ export default function ExamsPage() {
             <Button onClick={() => csvPriceInputRef.current?.click()} variant="outline" size="sm" disabled={isImportingPrices}>
               <Upload className="mr-2 h-4 w-4" />
               {isImportingPrices ? 'Importando...' : 'Importar Preços (CSV)'}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                const currentEmpresa = examsList[0]?.id_empresa || '001';
+                
+                let exportData = [];
+                
+                if (selectedPlanId !== "sem_plano") {
+                  // If a plan is selected, export current prices for that plan
+                  exportData = examsList.map(exam => {
+                    const price = bulkPrices[exam.id] || '';
+                    return {
+                      'ID_Empresa': currentEmpresa,
+                      'Id_Plano': selectedPlanId,
+                      'ID_Exame': exam.idExame || exam.examCode,
+                      'Preco_Atual': price
+                    };
+                  });
+                } else {
+                  // Template with some examples if no plan selected
+                  exportData = examsList.slice(0, 5).map(exam => ({
+                    'ID_Empresa': currentEmpresa,
+                    'Id_Plano': plansList[0]?.id || 'PLANO_EXEMPLO',
+                    'ID_Exame': exam.idExame || exam.examCode,
+                    'Preco_Atual': '0.00'
+                  }));
+                }
+                
+                if (exportData.length === 0) {
+                  exportData = [{
+                    'ID_Empresa': '001',
+                    'Id_Plano': 'PLANO_ABC',
+                    'ID_Exame': 'EX001',
+                    'Preco_Atual': '125.50'
+                  }];
+                }
+                
+                exportToCSV('modelo_importacao_precos', exportData);
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV (Modelo)
             </Button>
             {hasChanges && selectedPlanId !== "sem_plano" && (
               <Button onClick={handleSaveBulk} size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={isLoading}>

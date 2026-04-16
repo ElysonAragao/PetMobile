@@ -5,11 +5,12 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HeartPulse, PlusCircle, Trash2, Edit, ArrowUpDown, FileX, Undo2 } from 'lucide-react';
+import { HeartPulse, PlusCircle, Trash2, Edit, ArrowUpDown, FileX, Undo2, Download } from 'lucide-react';
 import Link from 'next/link';
 
 import { HealthPlan } from '@/lib/types';
 import { useHealthPlans, HealthPlanFormValues } from '@/hooks/use-health-plans';
+import { exportToCSV } from '@/lib/export-utils';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -102,9 +103,33 @@ function HealthPlanList({ plans, isLoaded, onEdit, onDelete }: { plans: HealthPl
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Planos Cadastrados</CardTitle>
-        <CardDescription>Visualize e gerencie todos os planos de saúde e convênios.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle>Planos Cadastrados</CardTitle>
+          <CardDescription>Visualize e gerencie todos os planos de saúde e convênios.</CardDescription>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const exportData = plans.map(p => ({
+              'Nome_Plano': p.nome,
+              'ID_Plano_Empresa': p.idPlano || '',
+              'Codigo_Sistema': p.codPlano || ''
+            }));
+            
+            const dataToExport = exportData.length > 0 ? exportData : [{
+              'Nome_Plano': 'Ex: Unimed',
+              'ID_Plano_Empresa': 'UN001',
+              'Codigo_Sistema': 'PL00001'
+            }];
+            
+            exportToCSV('modelo_importacao_planos', dataToExport);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Exportar CSV (Modelo)
+        </Button>
       </CardHeader>
       <CardContent>
         {sortedPlans.length > 0 ? (

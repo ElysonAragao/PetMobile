@@ -318,6 +318,39 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true });
         }
 
+        // ─── ZERAR MOVIMENTAÇÕES ───
+        if (action === 'reset_movements') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode zerar movimentações.' }, { status: 403 });
+            const { empresaId } = body;
+            if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
+
+            // 1. Deletar faturamentos
+            const { error: faturamentoError } = await adminClient
+                .from('pet_faturamento')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (faturamentoError) return NextResponse.json({ error: `Erro ao limpar faturamento: ${faturamentoError.message}` }, { status: 500 });
+
+            // 2. Deletar leituras
+            const { error: leiturasError } = await adminClient
+                .from('pet_leituras')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (leiturasError) return NextResponse.json({ error: `Erro ao limpar leituras: ${leiturasError.message}` }, { status: 500 });
+
+            // 3. Deletar movimentações
+            const { error: movimentacoesError } = await adminClient
+                .from('pet_movimentacoes')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (movimentacoesError) return NextResponse.json({ error: `Erro ao limpar movimentações: ${movimentacoesError.message}` }, { status: 500 });
+
+            return NextResponse.json({ success: true, message: 'Toda a movimentação, leituras e faturamento da empresa foram zerados.' });
+        }
+
         return NextResponse.json({ error: 'Ação não reconhecida.' }, { status: 400 });
 
     } catch (error: any) {

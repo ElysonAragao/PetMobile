@@ -2,6 +2,24 @@
 
 ---
 
+## [2026-04-16] - Padronização de Relatórios e Gestão de Ambiente (Master)
+
+### 📊 Auditoria e Relatórios de Usuários
+- **Paridade com Gestão de Usuários**: O relatório de usuários foi redesenhado para exibir as mesmas colunas da rotina de gerenciamento: **Número**, **Nome**, **E-mail**, **Perfil**, **Telefone**, **Cadastro**, **Validade** e **Situação**.
+- **Indicador de Situação Inteligente**: Adicionada a coluna **Situação** (Ativo/Inativo), que calcula o status do usuário em tempo real comparando a data atual com a validade cadastrada.
+- **UX de Auditoria**: A coluna de **Validade** foi movida para o final do relatório (penúltima), melhorando a visualização rápida do tempo de vida da conta.
+
+### 🛠️ Controle de Ambiente Experimental (Clean Setup)
+- **Zerar Movimentação (Master Only)**: Implementada função crítica para o perfil Master que permite realizar o "Wipe" (limpeza total) de **Movimentações**, **Leituras** e **Faturamento** de uma clínica específica.
+- **Apoio a Demonstrações/Testes**: Esta função permite que uma clínica utilize o sistema em caráter experimental e, após o período de testes, o Master limpe os dados de teste para iniciar o monitoramento real sem resíduos.
+- **Segurança de Dados Estruturais**: O processo de limpeza preserva todos os cadastros base (Pets, Exames, Veterinários e Usuários), evitando o retrabalho de reconfiguração do sistema.
+
+### 📤 Padronização de Exportação (Modelos CSV)
+- **Botões de Exportação/Modelo**: Adicionamos o botão "Exportar CSV (Modelo)" em todas as rotinas de cadastro (Pets, Exames, Veterinários e Planos de Saúde). 
+- **Facilitação de Importação**: O arquivo gerado serve como template oficial, garantindo que o usuário saiba exatamente o padrão necessário para futuras importações em lote.
+
+---
+
 ## [2026-04-15] - Inteligência de Faturamento e Refinamento de Documentos
 
 ### 📊 Visibilidade Financeira e KPIs nos Relatórios

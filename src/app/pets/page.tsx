@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2 } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -12,6 +12,7 @@ import { Pet, HealthPlan } from '@/lib/types';
 import { usePets, PetFormValues, calculateAge } from '@/hooks/use-pets';
 import { useHealthPlans } from '@/hooks/use-health-plans';
 import { useEspecies, Especie } from '@/hooks/use-especies';
+import { exportToCSV } from '@/lib/export-utils';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -526,9 +527,62 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Pets Cadastrados</CardTitle>
-        <CardDescription>Visualize e gerencie todos os animais registrados na clínica.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle>Pets Cadastrados</CardTitle>
+          <CardDescription>Visualize e gerencie todos os animais registrados na clínica.</CardDescription>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const exportData = pets.map(p => ({
+              'Nome_Pet': p.nome,
+              'Especie': p.especie,
+              'Raca': p.raca || '',
+              'Sexo_MF': p.sexo,
+              'Data_Nascimento': p.dataNascimento || '',
+              'Tutor_Nome': p.tutorNome,
+              'Tutor_CPF': p.tutorCpf,
+              'Tutor_Email': p.tutorEmail || '',
+              'Tutor_Telefone': p.tutorTelefone || '',
+              'CEP': p.tutorCep || '',
+              'Endereco': p.tutorEndereco || '',
+              'Bairro': p.tutorBairro || '',
+              'Cidade': p.tutorCidade || '',
+              'UF': p.tutorUf || '',
+              'Codigo_Plano': p.healthPlanCode || '',
+              'Matricula_Plano': p.matricula || '',
+              'Codigo_Pet_Antigo': p.codPet || ''
+            }));
+            
+            // If list is empty, export a header-only template
+            const dataToExport = exportData.length > 0 ? exportData : [{
+              'Nome_Pet': 'Ex: Bidu',
+              'Especie': 'Cão',
+              'Raca': 'Vira-lata',
+              'Sexo_MF': 'M',
+              'Data_Nascimento': '2020-01-01',
+              'Tutor_Nome': 'João Silva',
+              'Tutor_CPF': '000.000.000-00',
+              'Tutor_Email': 'joao@email.com',
+              'Tutor_Telefone': '(00) 00000-0000',
+              'CEP': '00000-000',
+              'Endereco': 'Rua Exemplo, 123',
+              'Bairro': 'Centro',
+              'Cidade': 'São Paulo',
+              'UF': 'SP',
+              'Codigo_Plano': '',
+              'Matricula_Plano': '',
+              'Codigo_Pet_Antigo': ''
+            }];
+            
+            exportToCSV('modelo_importacao_pets', dataToExport);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Exportar CSV (Modelo)
+        </Button>
       </CardHeader>
       <CardContent>
         {sortedPets.length > 0 ? (

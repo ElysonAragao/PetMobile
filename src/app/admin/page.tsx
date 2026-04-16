@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
     Building2, Users, PlusCircle, Trash2, Edit, KeyRound, Undo2,
-    Loader2, ArrowUpDown, Shield
+    Loader2, ArrowUpDown, Shield, RotateCcw
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -172,6 +172,15 @@ function EmpresasTab() {
         }
     };
 
+    const handleResetMovements = async (id: string, name: string) => {
+        const res = await adminApi("POST", { action: "reset_movements", empresaId: id });
+        if (res.success) {
+            toast({ title: "Movimentação zerada!", description: `Todo o histórico de ${name} foi removido.` });
+        } else {
+            toast({ title: "Erro", description: res.error, variant: "destructive" });
+        }
+    };
+
     const handleEdit = (empresa: Empresa) => {
         setEditingEmpresa(empresa);
         setForm({
@@ -305,6 +314,30 @@ function EmpresasTab() {
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(empresa)}>
                                                 <Edit className="h-4 w-4" />
                                             </Button>
+
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700" title="Zerar Movimentação">
+                                                        <RotateCcw className="h-4 w-4 mr-1" />
+                                                        Zerar
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Zerar Movimentação de &quot;{empresa.nome_fantasia}&quot;?</AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-destructive font-bold">
+                                                            ATENÇÃO: Isso excluirá permanentemente TODAS as guias emitidas, leituras realizadas e dados de faturamento desta empresa.
+                                                        </AlertDialogDescription>
+                                                        <AlertDialogDescription>
+                                                            Pacientes, exames e usuários NÃO serão afetados. Esta ação é irreversível.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleResetMovements(empresa.id, empresa.nome_fantasia)} className="bg-orange-600 hover:bg-orange-700">Zerar Movimentação</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="ghost" size="icon">

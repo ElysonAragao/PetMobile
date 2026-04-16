@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import { FileText, PawPrint, Building, Beaker, FileSpreadsheet, Download, Undo2, ArrowUpDown, Stethoscope, Users, CheckCircle2, Clock, DollarSign, Filter, Search } from 'lucide-react';
+import { FileText, PawPrint, Building, Beaker, FileSpreadsheet, Download, Undo2, ArrowUpDown, Stethoscope, Users, CheckCircle2, Clock, DollarSign, Filter, Search, RotateCcw } from 'lucide-react';
 
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,6 +21,10 @@ import { exportToCSV, exportToJSON, exportToTXT, exportToXML, exportToPDF } from
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useSession } from '@/context/session-context';
+import { useToast } from '@/hooks/use-toast';
+import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
 type SortConfig = { key: string; direction: 'ascending' | 'descending'; };
@@ -48,6 +52,8 @@ function SortableHead({ label, sortKey, sortConfig, onSort }: { label: string; s
 }
 
 export default function ReportsPage() {
+    const { user: sessionUser, isMaster, selectedEmpresaId } = useSession();
+    const { toast } = useToast();
     const [activeTab, setActiveTab] = React.useState("pets");
 
     const { pets, isLoaded: petsLoaded } = usePets();
@@ -304,13 +310,19 @@ export default function ReportsPage() {
         ];
     };
     const getAllUsersData = () => {
-        return (users || []).map(u => ({
-            "Nome_Usuário": u.nome,
-            "Email": u.email,
-            "Telefone": u.telefone || "-",
-            "Perfil": u.status,
-            "Status": "Ativo"
-        }));
+        return (users || []).map(u => {
+            const isExpired = u.dataValidade && new Date(u.dataValidade + 'T23:59:59') < new Date();
+            return {
+                "Número": u.numUsuario || "-",
+                "Nome_Usuário": u.nome,
+                "Email": u.email,
+                "Perfil": u.status,
+                "Telefone": u.telefone || "-",
+                "Cadastro": u.dataCadastro ? format(new Date(u.dataCadastro), 'dd/MM/yyyy HH:mm') : "-",
+                "Validade": u.dataValidade ? format(new Date(u.dataValidade + 'T00:00:00'), 'dd/MM/yyyy') : "Ilimitada",
+                "Situação": isExpired ? "Inativo" : "Ativo"
+            };
+        });
     };
 
     const ExportMenu = ({ title, getData, disabled }: { title: string, getData: () => object[], disabled: boolean }) => (
@@ -345,10 +357,66 @@ export default function ReportsPage() {
         </div>
     );
 
+    const handleResetMovements = async () => {
+        if (!selectedEmpresaId) return;
+        
+        try {
+            const supabase = createClient();
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            
+            const res = await fetch('/api/admin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ action: "reset_movements", empresaId: selectedEmpresaId }),
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                toast({ title: "Sucesso", description: "Toda a movimentação desta clínica foi zerada." });
+                window.location.reload(); // Reload to refresh all data
+            } else {
+                toast({ title: "Erro", description: result.error, variant: "destructive" });
+            }
+        } catch (err: any) {
+            toast({ title: "Erro fatal", description: err.message, variant: "destructive" });
+        }
+    };
+
     return (
         <div className="pb-10">
             <PageTitle title="Relatórios e Auditoria" description="Extração de dados clínica e exportação de movimentações v2.9">
-                <Link href="/" passHref><Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button></Link>
+                <div className="flex gap-2">
+                    {isMaster && selectedEmpresaId && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" className="bg-orange-600 hover:bg-orange-700">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    Zerar Movimentação
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Zerar Movimentação desta Clínica?</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-destructive font-bold">
+                                        ATENÇÃO: Você está prestes a apagar TODO o histórico de movimentações, leituras e faturamento desta clínica.
+                                    </AlertDialogDescription>
+                                    <AlertDialogDescription>
+                                        Os cadastros de pets, exames, usuários e planos de saúde NÃO serão afetados. Esta ação é irreversível.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleResetMovements} className="bg-orange-600 hover:bg-orange-700">Zerar Agora</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                    <Link href="/" passHref><Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button></Link>
+                </div>
             </PageTitle>
 
 
@@ -819,22 +887,40 @@ export default function ReportsPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <SortableHead label="Número" sortKey="Número" sortConfig={sortConfig} onSort={requestSort} />
                                         <SortableHead label="Nome" sortKey="Nome_Usuário" sortConfig={sortConfig} onSort={requestSort} />
                                         <SortableHead label="E-mail" sortKey="Email" sortConfig={sortConfig} onSort={requestSort} />
                                         <SortableHead label="Perfil" sortKey="Perfil" sortConfig={sortConfig} onSort={requestSort} />
-                                        <TableHead>Status</TableHead>
+                                        <TableHead>Telefone</TableHead>
+                                        <SortableHead label="Cadastro" sortKey="Cadastro" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHead label="Validade" sortKey="Validade" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHead label="Situação" sortKey="Situação" sortConfig={sortConfig} onSort={requestSort} />
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {sortData(getAllUsersData(), sortConfig).map((u, i) => (
                                         <TableRow key={i}>
+                                            <TableCell className="text-xs font-mono">{u.Número}</TableCell>
                                             <TableCell className="font-bold">{u.Nome_Usuário}</TableCell>
                                             <TableCell className="text-sm">{u.Email}</TableCell>
                                             <TableCell>{u.Perfil}</TableCell>
-                                            <TableCell><span className="flex items-center gap-1.5 text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full w-min"><CheckCircle2 size={12}/> Ativo</span></TableCell>
+                                            <TableCell className="text-sm">{u.Telefone}</TableCell>
+                                            <TableCell className="text-xs">{u.Cadastro}</TableCell>
+                                            <TableCell className="text-xs font-mono bg-slate-50">{u.Validade}</TableCell>
+                                            <TableCell>
+                                                {u.Situação === "Ativo" ? (
+                                                    <span className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full w-min border border-green-100">
+                                                        <CheckCircle2 size={10}/> ATIVO
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1.5 text-[10px] text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded-full w-min border border-red-100">
+                                                        <Clock size={10}/> EXPIRADO
+                                                    </span>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
-                                    {getAllUsersData().length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>}
+                                    {getAllUsersData().length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>}
                                 </TableBody>
                             </Table>
                         </CardContent>

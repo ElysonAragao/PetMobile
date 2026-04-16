@@ -4,12 +4,13 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 import { Veterinario } from '@/lib/types';
 import { useVeterinarios, VeterinarioFormValues } from '@/hooks/use-veterinarios';
+import { exportToCSV } from '@/lib/export-utils';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,9 +73,37 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Médicos Veterinários Cadastrados</CardTitle>
-        <CardDescription>Gerencie o corpo clínico da sua clínica pet.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle>Médicos Veterinários Cadastrados</CardTitle>
+          <CardDescription>Gerencie o corpo clínico da sua clínica pet.</CardDescription>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const exportData = veterinarios.map(v => ({
+              'Nome': v.nome,
+              'CRMV': v.crmv,
+              'Email': v.email || '',
+              'Telefone': v.telefone || '',
+              'Codigo_Vet_Antigo': v.codVet || ''
+            }));
+            
+            const dataToExport = exportData.length > 0 ? exportData : [{
+              'Nome': 'Dr. Exemplo',
+              'CRMV': '12345/SP',
+              'Email': 'dr@email.com',
+              'Telefone': '(00) 00000-0000',
+              'Codigo_Vet_Antigo': 'VET001'
+            }];
+            
+            exportToCSV('modelo_importacao_veterinarios', dataToExport);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Exportar CSV (Modelo)
+        </Button>
       </CardHeader>
       <CardContent>
         {sortedVets.length > 0 ? (
