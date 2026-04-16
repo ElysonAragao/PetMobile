@@ -11,6 +11,7 @@ import { Exam } from '@/lib/types';
 import { useExams, ExamFormValues } from '@/hooks/use-exams';
 import { useHealthPlans } from '@/hooks/use-health-plans';
 import { usePrecos } from '@/hooks/use-precos';
+import { useSession } from '@/context/session-context';
 import { exportToCSV } from '@/lib/export-utils';
 import { format } from 'date-fns';
 import { PageTitle } from '@/components/layout/page-title';
@@ -479,6 +480,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
 export default function ExamsPage() {
   const { exams, addExam, updateExam, deleteExam, deleteAllExams, isLoaded, error, getNextExamCode } = useExams();
   const { healthPlans } = useHealthPlans();
+  const { selectedEmpresaId } = useSession();
   const [activeTab, setActiveTab] = React.useState("list");
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedExam, setSelectedExam] = React.useState<Exam | null>(null);
@@ -733,7 +735,7 @@ export default function ExamsPage() {
               variant="outline" 
               size="sm" 
               onClick={() => {
-                const currentEmpresa = examsList[0]?.id_empresa || '001';
+                const currentEmpresa = selectedEmpresaId || '001';
                 
                 let exportData = [];
                 
