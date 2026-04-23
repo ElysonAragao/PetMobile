@@ -1,5 +1,22 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-04-21] - Planejamento: Prontuário Digital e Documentos Clínicos
+
+### 🏥 Arquitetura do Prontuário Digital (Proposta Aceita)
+- **Centralização de Eventos Clínicos**: Implementação da tabela `pet_prontuarios` vinculada a `pet_pets` e `pet_usuarios` (MedicoVet).
+- **Campos Estruturados**: Histórico com Data de Atendimento, Tipo (Consulta, Exame, Procedimento, Retorno), Descrição Livre e Prescrição Médica.
+- **Lógica de Retorno Inteligente**: Monitoramento do período de 30 dias para consultas de retorno, com sinalização de status (Ativo/Expirado).
+- **Integração de Exames**: Vínculo direto com a tabela `pet_exames` para solicitações e registro de evolução.
+
+### 📄 Gestão de Documentos e Laudos
+- **Storage de Imagens**: Uso do Supabase Storage para armazenamento de fotos de exames, laudos e evolução clínica diretamente no prontuário.
+- **Módulo de Registros Dinâmicos**: Tabela `pet_documentos_clinicos` para geração e armazenamento de **Receitas**, **Atestados**, **Recibos** e **Guias de Internação** pré-formatados com dados do paciente.
+- **Templates Flexíveis**: Sistema de modelos para anamnese (perguntas padrão) e documentos, permitindo padronização entre diferentes tipos de atendimento.
+
+### 🛡️ Segurança e UX Médica
+- **Restrição por Perfil**: Implementação de RLS (Row Level Security) garantindo que a edição de prontuários seja exclusiva para o perfil `MedicoVet`.
+- **Preenchimento Automático**: Interface otimizada para carregar dados do Tutor e do Plano de Saúde instantaneamente ao selecionar o Pet.
+
 ---
 
 ## [2026-04-16] - Padronização de Relatórios e Gestão de Ambiente (Master)

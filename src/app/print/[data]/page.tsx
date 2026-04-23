@@ -114,7 +114,7 @@ function PrintContent() {
         if (isLeitura) {
             router.push('/scan');
         } else {
-            router.push('/movement');
+            router.push('/movement?mode=guia&focus=newGuide');
         }
     };
 

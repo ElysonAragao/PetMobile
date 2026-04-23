@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -637,7 +637,12 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
                   <TableCell>{pet.tutorNome}</TableCell>
                   <TableCell>{pet.tutorCpf}</TableCell>
                   <TableCell>{pet.healthPlanName}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right flex justify-end gap-1">
+                    <Link href={`/pets/${pet.id}/prontuario`} passHref>
+                      <Button variant="ghost" size="icon" title="Prontuário Digital">
+                        <FileText className="h-4 w-4 text-primary" />
+                      </Button>
+                    </Link>
                     <Button variant="ghost" size="icon" onClick={() => onEdit(pet)}><Edit className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => onDelete(pet.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </TableCell>

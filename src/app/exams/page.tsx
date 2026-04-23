@@ -498,6 +498,11 @@ export default function ExamsPage() {
     const priceInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
     const csvPriceInputRef = React.useRef<HTMLInputElement>(null);
 
+    const filteredExams = React.useMemo(() => {
+      if (selectedPlanId === "sem_plano") return [];
+      return examsList.filter(exam => exam.healthPlanId === selectedPlanId);
+    }, [examsList, selectedPlanId]);
+
     // When a plan is selected, fetch prices and auto-enter edit mode
     React.useEffect(() => {
       if (selectedPlanId !== "sem_plano") {
@@ -513,18 +518,18 @@ export default function ExamsPage() {
     // When precos change, init the bulk prices map
     React.useEffect(() => {
       const initial: Record<string, string> = {};
-      examsList.forEach(exam => {
+      filteredExams.forEach(exam => {
         const p = precos.find(price => price.exame_id === exam.id);
         initial[exam.id] = p?.preco_atual != null ? String(p.preco_atual) : "";
       });
       setBulkPrices(initial);
-    }, [precos, examsList]);
+    }, [precos, filteredExams]);
 
     // Auto-focus first price input when plan is selected and data is loaded
     React.useEffect(() => {
-      if (selectedPlanId !== "sem_plano" && examsList.length > 0) {
+      if (selectedPlanId !== "sem_plano" && filteredExams.length > 0) {
         const timer = setTimeout(() => {
-          const firstExamId = examsList[0]?.id;
+          const firstExamId = filteredExams[0]?.id;
           if (firstExamId && priceInputRefs.current[firstExamId]) {
             priceInputRefs.current[firstExamId]?.focus();
             priceInputRefs.current[firstExamId]?.select();
@@ -532,7 +537,7 @@ export default function ExamsPage() {
         }, 300);
         return () => clearTimeout(timer);
       }
-    }, [selectedPlanId, examsList, precos]);
+    }, [selectedPlanId, filteredExams, precos]);
 
     const handleBulkPriceChange = (examId: string, value: string) => {
       setBulkPrices(prev => ({ ...prev, [examId]: value }));
@@ -543,9 +548,9 @@ export default function ExamsPage() {
       if (e.key === 'Enter') {
         e.preventDefault();
         // Find next exam in the list
-        const currentIndex = examsList.findIndex(ex => ex.id === currentExamId);
-        if (currentIndex >= 0 && currentIndex < examsList.length - 1) {
-          const nextExamId = examsList[currentIndex + 1].id;
+        const currentIndex = filteredExams.findIndex(ex => ex.id === currentExamId);
+        if (currentIndex >= 0 && currentIndex < filteredExams.length - 1) {
+          const nextExamId = filteredExams[currentIndex + 1].id;
           priceInputRefs.current[nextExamId]?.focus();
           priceInputRefs.current[nextExamId]?.select();
         }
@@ -604,15 +609,15 @@ export default function ExamsPage() {
           return -1;
         };
 
-        const colEmpresa = findCol('id_empresa', 'idempresa', 'empresa');
-        const colPlano = findCol('id_plano', 'idplano', 'plano');
-        const colExame = findCol('id_exame', 'idexame', 'exame');
-        const colPreco = findCol('preco_atual', 'precoatual', 'preco', 'valor');
+        const colEmpresa = findCol('id_empresa', 'idempresa', 'empresa', 'nome da empresa');
+        const colPlano = findCol('id_plano', 'idplano', 'plano', 'nome do plano');
+        const colExame = findCol('id_exame', 'idexame', 'exame', 'codigo do exame');
+        const colPreco = findCol('preco_atual', 'precoatual', 'preco', 'valor', 'preco do exame');
 
         if (colPlano === -1 || colExame === -1 || colPreco === -1) {
           toast({
             title: "Erro no CSV de Preços",
-            description: "Cabeçalho obrigatório não encontrado. Colunas necessárias: Id_Plano, ID_Exame, Preço Atual.",
+            description: "Cabeçalho obrigatório não encontrado. Colunas necessárias: Nome do Plano, Codigo do Exame, Preco do Exame.",
             variant: "destructive"
           });
           setIsImportingPrices(false);
@@ -736,40 +741,34 @@ export default function ExamsPage() {
               size="sm" 
               onClick={() => {
                 const currentEmpresa = selectedEmpresaId || '001';
+                const selectedPlanName = plansList.find(p => p.id === selectedPlanId)?.nome || 'Plano';
                 
                 let exportData = [];
                 
-                if (selectedPlanId !== "sem_plano") {
+                if (selectedPlanId !== "sem_plano" && filteredExams.length > 0) {
                   // If a plan is selected, export current prices for that plan
-                  exportData = examsList.map(exam => {
+                  exportData = filteredExams.map(exam => {
                     const price = bulkPrices[exam.id] || '';
                     return {
-                      'ID_Empresa': currentEmpresa,
-                      'Id_Plano': selectedPlanId,
-                      'ID_Exame': exam.idExame || exam.examCode,
-                      'Preco_Atual': price
+                      'Nome da Empresa': currentEmpresa,
+                      'Nome do Plano': selectedPlanName,
+                      'Codigo do Exame': exam.examCode || exam.idExame,
+                      'Nome do Exame': exam.name,
+                      'Preco do Exame': price
                     };
                   });
                 } else {
                   // Template with some examples if no plan selected
-                  exportData = examsList.slice(0, 5).map(exam => ({
-                    'ID_Empresa': currentEmpresa,
-                    'Id_Plano': plansList[0]?.id || 'PLANO_EXEMPLO',
-                    'ID_Exame': exam.idExame || exam.examCode,
-                    'Preco_Atual': '0.00'
-                  }));
-                }
-                
-                if (exportData.length === 0) {
                   exportData = [{
-                    'ID_Empresa': '001',
-                    'Id_Plano': 'PLANO_ABC',
-                    'ID_Exame': 'EX001',
-                    'Preco_Atual': '125.50'
+                    'Nome da Empresa': 'Clinica Vet',
+                    'Nome do Plano': 'Plano Ouro',
+                    'Codigo do Exame': 'EX001',
+                    'Nome do Exame': 'Hemograma',
+                    'Preco do Exame': '125.50'
                   }];
                 }
                 
-                exportToCSV('modelo_importacao_precos', exportData);
+                exportToCSV(`tabela_precos_${selectedPlanName.replace(/\s+/g, '_')}`, exportData);
               }}
             >
               <Download className="mr-2 h-4 w-4" />
@@ -810,7 +809,7 @@ export default function ExamsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {examsList.map((exam, idx) => {
+                  {filteredExams.map((exam, idx) => {
                     const precoInfo = precos.find(p => p.exame_id === exam.id);
                     return (
                       <TableRow key={exam.id} className="hover:bg-blue-50/30 transition-colors">
@@ -848,8 +847,8 @@ export default function ExamsPage() {
           {/* CSV Template Info */}
           <div className="bg-slate-50 border rounded-lg p-4 text-sm space-y-2">
             <p className="font-bold text-slate-700 flex items-center gap-2"><Upload className="h-4 w-4" /> Modelo CSV para Importação de Preços:</p>
-            <code className="block bg-white p-2 rounded border text-xs font-mono text-slate-600 whitespace-pre">ID_Empresa;Id_Plano;ID_Exame;Preco_Atual{'\n'}001;PLANO_ABC;EX001;125.50{'\n'}001;PLANO_ABC;EX002;89.00</code>
-            <p className="text-xs text-muted-foreground italic">Os campos Id_Plano e ID_Exame aceitam UUID, código ou nome. O sistema moverá o preço existente para &quot;Preço Anterior&quot; automaticamente.</p>
+            <code className="block bg-white p-2 rounded border text-xs font-mono text-slate-600 whitespace-pre">Nome da Empresa;Nome do Plano;Codigo do Exame;Nome do Exame;Preco do Exame{'\n'}Clinica Vet;Plano Ouro;EX001;Hemograma;125.50{'\n'}Clinica Vet;Plano Ouro;EX002;Ultrassom;89.00</code>
+            <p className="text-xs text-muted-foreground italic">O sistema encontrará o plano e os exames pelos nomes ou códigos informados. O sistema moverá o preço existente para &quot;Preço Anterior&quot; automaticamente.</p>
           </div>
         </CardContent>
       </Card>
@@ -894,6 +893,7 @@ export default function ExamsPage() {
       const colNome = findCol('nome do exame', 'nome_exame', 'nomeexame', 'nome');
       const colDescricao = findCol('descricao', 'descrição');
       const colPlano = findCol('plano de saude', 'plano_saude', 'planosaud', 'plano');
+      const colUrgente = findCol('urgente', 'urgência', 'urgencia');
 
       if (colNome === -1) {
         toast({ title: "Erro no CSV", description: "Cabeçalho não encontrado: 'Nome do Exame' ou 'Nome'. Verifique o arquivo.", variant: "destructive" });
@@ -915,6 +915,7 @@ export default function ExamsPage() {
         const idExame = colIdExame !== -1 ? cols[colIdExame]?.trim() : '';
         const descricao = colDescricao !== -1 ? cols[colDescricao]?.trim() : nome;
         const planoSaudeNome = colPlano !== -1 ? cols[colPlano]?.trim() : '';
+        const urgenteRaw = colUrgente !== -1 ? cols[colUrgente]?.trim() : '';
 
         if (!nome) continue; // Skip empty rows
 
@@ -931,6 +932,12 @@ export default function ExamsPage() {
 
         // Map tipo: default to Laboratório if not recognized
         const tipo = (normalize(tipoRaw) === 'imagem') ? 'Imagem' as const : 'Laboratório' as const;
+        
+        let isUrgencyValue = false;
+        if (urgenteRaw) {
+           const normUrgency = normalize(urgenteRaw);
+           isUrgencyValue = normUrgency === 'sim' || normUrgency === 's' || normUrgency === 'true' || normUrgency === '1';
+        }
 
         try {
           await addExam({
@@ -940,7 +947,7 @@ export default function ExamsPage() {
             description: descricao || nome,
             healthPlanId: healthPlanId,
             healthPlanName: healthPlanName,
-            isUrgency: false
+            isUrgency: isUrgencyValue
           });
           successCount++;
         } catch (err) {
