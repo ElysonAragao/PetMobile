@@ -462,7 +462,7 @@ export default function ProntuarioPage() {
                       render={({ field }) => (
                           <FormItem>
                               <FormLabel>Registrar em nome de (Médico)</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                              <Select onValueChange={field.onChange} value={field.value || undefined}>
                                   <FormControl>
                                       <SelectTrigger><SelectValue placeholder="Selecione o Médico Veterinário" /></SelectTrigger>
                                   </FormControl>
