@@ -24,6 +24,7 @@ import { useUsers } from '@/hooks/use-user-management';
 import { useProntuarios, ProntuarioInsert, Prontuario } from '@/hooks/use-prontuarios';
 import { useDocumentos, DocumentoInsert } from '@/hooks/use-documentos';
 import { useSession } from '@/context/session-context';
+import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
 
 export default function ProntuarioPage() {
   const { id } = useParams() as { id: string };
@@ -39,14 +40,14 @@ export default function ProntuarioPage() {
   const [isDocOpen, setIsDocOpen] = React.useState(false);
   const [editingProntuario, setEditingProntuario] = React.useState<Prontuario | null>(null);
   const [editMode, setEditMode] = React.useState<'edit' | 'adendo' | 'new'>('new');
+  const [medicoFilter, setMedicoFilter] = React.useState<string>('all');
 
   const pet = pets.find(p => p.id === id);
 
   const veterinarios = React.useMemo(() => {
     return (users || []).filter(u => 
         u.status === 'MedicoVet' || 
-        u.status === 'Administrador' || 
-        u.status === 'Master'
+        u.status === 'MedicoVet Geral'
     );
   }, [users]);
   
@@ -78,6 +79,45 @@ export default function ProntuarioPage() {
       formProntuario.setValue('medico_id', user.id);
     }
   }, [user, formProntuario, editingProntuario, canSelectMedico]);
+
+  const petProntuarioIds = React.useMemo(() => prontuarios.map(p => p.id), [prontuarios]);
+  const petDocumentos = React.useMemo(() => documentos.filter(d => petProntuarioIds.includes(d.prontuario_id)), [documentos, petProntuarioIds]);
+
+  // Filtragem por médico
+  const filteredProntuarios = React.useMemo(() => {
+    if (medicoFilter === 'all') return prontuarios;
+    return prontuarios.filter(p => p.medico_id === medicoFilter);
+  }, [prontuarios, medicoFilter]);
+
+  // Separação em duas listas
+  const consultas = React.useMemo(() => filteredProntuarios.filter(p => p.tipo_atendimento.includes('Consulta')), [filteredProntuarios]);
+  const demaisAtendimentos = React.useMemo(() => filteredProntuarios.filter(p => !p.tipo_atendimento.includes('Consulta')), [filteredProntuarios]);
+
+  const handleExport = async (formatType: 'pdf' | 'csv' | 'txt') => {
+      if (!pet) return;
+      
+      const rows = filteredProntuarios.map(pront => {
+          const med = users.find(v => v.id === pront.medico_id);
+          return {
+              'Data': format(new Date(pront.data_atendimento), 'dd/MM/yyyy HH:mm'),
+              'Tipo': pront.tipo_atendimento,
+              'Médico': med?.nome || 'Não informado',
+              'Descrição': pront.descricao_livre || '-',
+              'Prescrição': pront.prescricao_medica || '-'
+          };
+      });
+
+      const filename = `prontuario_${pet.nome.toLowerCase().replace(/\s/g, '_')}`;
+      const title = `Histórico Clínico: ${pet.nome} (${pet.especie})`;
+
+      if (formatType === 'csv') {
+          await exportToCSV(filename, rows);
+      } else if (formatType === 'txt') {
+          await exportToTXT(filename, rows);
+      } else {
+          await exportToPDF(filename, title, rows);
+      }
+  };
 
   if (!petsLoaded || !prontLoaded || !docsLoaded || !usersLoaded) {
     return <div className="p-8 text-center"><Activity className="animate-spin h-8 w-8 mx-auto mb-4" />Carregando prontuário...</div>;
@@ -194,13 +234,6 @@ export default function ProntuarioPage() {
     toast({ title: "Upload Indisponível", description: "O módulo de Anexos/Arquivos (imagens e pdf) será liberado em breve, pois requer configuração do Storage.", variant: "default" });
   };
 
-  const petProntuarioIds = prontuarios.map(p => p.id);
-  const petDocumentos = documentos.filter(d => petProntuarioIds.includes(d.prontuario_id));
-
-  // Separação em duas listas
-  const consultas = prontuarios.filter(p => p.tipo_atendimento.includes('Consulta'));
-  const demaisAtendimentos = prontuarios.filter(p => !p.tipo_atendimento.includes('Consulta'));
-
   return (
     <>
       <PageTitle title={`Prontuário: ${pet.nome}`} description={`${pet.especie} ${pet.raca ? `- ${pet.raca}` : ''} | Tutor: ${pet.tutorNome} (${pet.tutorCpf})`}>
@@ -247,9 +280,35 @@ export default function ProntuarioPage() {
             </TabsList>
 
             <TabsContent value="historico" className="space-y-4">
-              <div className="flex justify-between items-center mb-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="w-5 h-5" /> Painel de Atendimentos</h3>
-                <Button onClick={openNewProntuario}><Plus className="w-4 h-4 mr-2" /> Registrar Evolução</Button>
+                <div className="flex flex-wrap gap-2">
+                    <Select value={medicoFilter} onValueChange={setMedicoFilter}>
+                        <SelectTrigger className="w-[180px] h-9">
+                            <SelectValue placeholder="Filtrar por Médico" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Médicos</SelectItem>
+                            {veterinarios.map(v => (
+                                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    
+                    <div className="flex border rounded-md overflow-hidden">
+                        <Button variant="ghost" size="sm" className="h-9 px-3 rounded-none border-r" onClick={() => handleExport('pdf')} title="Exportar PDF">
+                            <Download className="w-4 h-4 mr-1" /> PDF
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-9 px-3 rounded-none border-r" onClick={() => handleExport('csv')} title="Exportar CSV">
+                            CSV
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-9 px-3 rounded-none" onClick={() => handleExport('txt')} title="Exportar TXT">
+                            TXT
+                        </Button>
+                    </div>
+
+                    <Button onClick={openNewProntuario} size="sm" className="h-9"><Plus className="w-4 h-4 mr-2" /> Registrar Evolução</Button>
+                </div>
               </div>
 
               {prontuarios.length === 0 ? (

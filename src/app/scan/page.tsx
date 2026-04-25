@@ -62,6 +62,7 @@ export default function ScanPage() {
   const [manualVetSearch, setManualVetSearch] = React.useState('');
   const [manualExamSearch, setManualExamSearch] = React.useState('');
   const [showAllExams, setShowAllExams] = React.useState(false);
+  const [identifiedExamIds, setIdentifiedExamIds] = React.useState<string[]>([]);
 
   // OCR state
   const [isOcrProcessing, setIsOcrProcessing] = React.useState(false);
@@ -124,7 +125,7 @@ export default function ScanPage() {
     if (movData.exame_ids && movData.exame_ids.length > 0) {
       const { data: examsDataSB } = await supabase
         .from('pet_exames')
-        .select('id, nome, description:descricao, type:tipo, examCode:codigo, idExame:id_exame')
+        .select('id, name:nome, description:descricao, type:tipo, examCode:codigo, idExame:id_exame, isUrgency:is_urgency')
         .in('id', movData.exame_ids);
       if (examsDataSB) examsData = examsDataSB as unknown as Exam[];
     }
@@ -253,13 +254,21 @@ export default function ScanPage() {
 
   const filteredExams = React.useMemo(() => {
     let baseExams = exams;
-    if (currentPetData && currentPetData.healthPlanName && !showAllExams) {
-      baseExams = exams.filter(e => !e.healthPlanName || e.healthPlanName.trim() === '' || e.healthPlanName.trim().toLowerCase() === currentPetData.healthPlanName.trim().toLowerCase());
+
+    // Se temos exames identificados via OCR e NÃO estamos mostrando todos, mostra apenas os identificados
+    if (identifiedExamIds.length > 0 && !showAllExams) {
+      baseExams = exams.filter(e => identifiedExamIds.includes(e.id));
+    } else {
+      // Caso contrário, aplica filtro por Plano de Saúde se não estiver mostrando tudo
+      if (currentPetData && currentPetData.healthPlanName && !showAllExams) {
+        baseExams = exams.filter(e => !e.healthPlanName || e.healthPlanName.trim() === '' || e.healthPlanName.trim().toLowerCase() === currentPetData.healthPlanName.trim().toLowerCase());
+      }
     }
+
     if (!manualExamSearch) return baseExams;
     const s = manualExamSearch.toLowerCase();
     return baseExams.filter(e => e.name.toLowerCase().includes(s) || (e.idExame && e.idExame.toLowerCase().includes(s)));
-  }, [exams, manualExamSearch, currentPetData, showAllExams]);
+  }, [exams, manualExamSearch, currentPetData, showAllExams, identifiedExamIds]);
 
   const handleManualSubmit = async () => {
     if (!manualPetId || !manualVetId || manualExamIds.length === 0) {
@@ -277,6 +286,8 @@ export default function ScanPage() {
         setManualPetSearch('');
         setManualVetSearch('');
         setManualExamSearch('');
+        setIdentifiedExamIds([]);
+        setShowAllExams(false);
         if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
         await processScannedData(result.movimentoId);
       } else {
@@ -354,11 +365,12 @@ export default function ScanPage() {
 
       const fuse = new Fuse(exams, {
         keys: [
-          { name: 'name', weight: 0.7 },
+          { name: 'name', weight: 0.6 },
+          { name: 'description', weight: 0.2 },
           { name: 'examCode', weight: 1.0 },
           { name: 'idExame', weight: 1.0 }
         ],
-        threshold: 0.35,
+        threshold: 0.2,
         includeScore: true,
         ignoreLocation: true,
       });
@@ -375,27 +387,36 @@ export default function ScanPage() {
       const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 2);
       
       lines.forEach(line => {
-        const results = fuse.search(line);
-        if (results.length > 0 && results[0].score !== undefined && results[0].score < 0.35) {
-           matchedExamIds.add(results[0].item.id);
-        }
-        
         const words = line.split(/[\s,;\-]+/).filter(w => w.length >= 3);
-        words.forEach(word => {
-            const wordResults = fuse.search(word);
-            if (wordResults.length > 0 && wordResults[0].score !== undefined) {
-               const isPotentialCode = /^\d+$/.test(word) || (word.length <= 6 && /[0-9]/.test(word));
-               const strictThreshold = isPotentialCode ? 0.1 : 0.3;
-               
-               if (wordResults[0].score < strictThreshold) {
-                  matchedExamIds.add(wordResults[0].item.id);
-               }
-            }
-        });
+        let foundByExactCode = false;
+
+        // 1. Tenta Match Exato por Código Primeiro (Alta Precisão)
+        for (const word of words) {
+          const exactMatch = exams.find(e => 
+            (e.examCode && e.examCode.toUpperCase() === word.toUpperCase()) || 
+            (e.idExame && e.idExame.toUpperCase() === word.toUpperCase())
+          );
+          
+          if (exactMatch) {
+            matchedExamIds.add(exactMatch.id);
+            foundByExactCode = true;
+          }
+        }
+
+        // 2. Se NÃO encontrou por código exato, tenta busca difusa na linha
+        if (!foundByExactCode) {
+          const results = fuse.search(line);
+          if (results.length > 0 && results[0].score !== undefined && results[0].score < 0.2) {
+             matchedExamIds.add(results[0].item.id);
+          }
+        }
       });
 
       if (matchedExamIds.size > 0) {
-        setManualExamIds(Array.from(matchedExamIds));
+        const matchedArray = Array.from(matchedExamIds);
+        setManualExamIds(matchedArray);
+        setIdentifiedExamIds(matchedArray); // Armazena o que foi identificado
+        setShowAllExams(false); // Garante que a visão inicial seja apenas do que foi lido
         toast({ title: "Leitura Concluída", description: `Encontramos ${matchedExamIds.size} possível(is) exame(s). Audite a seleção.` });
       } else {
         toast({ title: "Aviso", description: "O sistema leu a imagem/PDF, mas não detectou nomes iguais aos seus códigos." });
@@ -455,12 +476,14 @@ export default function ScanPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Button onClick={() => { 
                   setManualPetId(''); setManualVetId(''); setManualExamIds([]); setManualPetSearch(''); setManualVetSearch(''); setManualExamSearch('');
+                  setIdentifiedExamIds([]); setShowAllExams(false);
                   setIsManualModalOpen(true); 
                 }} className="h-12 bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" variant="outline">
                   <Edit className="mr-2 h-5 w-5" /> Digitar Manualmente
                 </Button>
                 <Button onClick={() => { 
                   setManualPetId(''); setManualVetId(''); setManualExamIds([]); setManualPetSearch(''); setManualVetSearch(''); setManualExamSearch('');
+                  setIdentifiedExamIds([]); setShowAllExams(false);
                   if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
                   setIsManualModalOpen(true); 
                 }} className="h-12 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
@@ -512,10 +535,38 @@ export default function ScanPage() {
 
                 <div className="p-5">
                   <div className="text-[9pt] font-bold text-blue-500 uppercase tracking-wider mb-3 flex items-center gap-2"><FileText className="w-4 h-4" /> Exames Solicitados ({decodedData.exams.length})</div>
-                  <div className="space-y-2">
-                    {decodedData.exams.map(e => (
-                      <div key={e.id} className="text-sm border-l-4 border-blue-400 pl-3 py-1 bg-slate-50">{e.idExame || e.examCode} — {e.name}</div>
-                    ))}
+                  <div className="space-y-4">
+                    {/* Exames de Urgência */}
+                    {decodedData.exams.filter(e => e.isUrgency).length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[8pt] font-black text-red-600 uppercase flex items-center gap-1.5 mb-1 px-1">
+                          <AlertTriangle className="w-3 h-3" /> Exames de Urgência
+                        </div>
+                        {decodedData.exams.filter(e => e.isUrgency).map(e => (
+                          <div key={e.id} className="text-sm border-l-4 border-red-500 pl-3 py-2 bg-red-50/30 rounded-r-md">
+                            <div className="font-bold flex justify-between">
+                              <span>{e.idExame || e.examCode} — {e.name}</span>
+                            </div>
+                            {e.description && <p className="text-[11px] text-red-700/70 mt-0.5 italic">{e.description}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Exames Normais */}
+                    {decodedData.exams.filter(e => !e.isUrgency).length > 0 && (
+                      <div className="space-y-2">
+                        {decodedData.exams.filter(e => e.isUrgency).length > 0 && <div className="text-[8pt] font-black text-slate-400 uppercase mt-2 px-1">Exames Normais</div>}
+                        {decodedData.exams.filter(e => !e.isUrgency).map(e => (
+                          <div key={e.id} className="text-sm border-l-4 border-blue-400 pl-3 py-2 bg-slate-50/50 rounded-r-md">
+                            <div className="font-bold flex justify-between">
+                              <span>{e.idExame || e.examCode} — {e.name}</span>
+                            </div>
+                            {e.description && <p className="text-[11px] text-slate-500 mt-0.5 italic">{e.description}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -542,7 +593,7 @@ export default function ScanPage() {
                       "Paciente": decodedData.pet.nome,
                       "Tutor": decodedData.pet.tutor_nome,
                       "Veterinario_Responsavel": decodedData.veterinario.nome,
-                      "Exames_Solicitados": decodedData.exams.map((e: any) => `${e.idExame || e.examCode} - ${e.name}`)
+                      "Exames_Solicitados": decodedData.exams.map((e: any) => `${e.idExame || e.examCode} - ${e.name}${e.description ? ` (${e.description})` : ''}`)
                     };
                     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
@@ -569,7 +620,7 @@ export default function ScanPage() {
   <Tutor>${decodedData.pet.tutor_nome || ''}</Tutor>
   <Veterinario_Responsavel>${decodedData.veterinario.nome}</Veterinario_Responsavel>
   <Exames_Solicitados>
-${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e.name}</Exame>`).join('\n')}
+${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e.name}${e.description ? ` (${e.description})` : ''}</Exame>`).join('\n')}
   </Exames_Solicitados>
 </Leitura>`;
                     const blob = new Blob([xml], { type: 'application/xml' });
@@ -588,7 +639,18 @@ ${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e
                   size="sm" 
                   className="rounded-none hover:bg-slate-100 py-6 h-auto flex flex-col gap-1"
                   onClick={() => {
-                    const txt = `Cód_Leitura: ${codLeitura} - Data Leitura: ${new Date().toLocaleDateString('pt-BR')}\nReferente a: ${decodedData.movimentoId}\n\nPaciente: ${decodedData.pet.nome}\nTutor: ${decodedData.pet.tutor_nome || ''}\nVeterinário: ${decodedData.veterinario.nome}\nExames:\n${decodedData.exams.map((e: any) => `- ${e.idExame || e.examCode} - ${e.name}`).join('\n')}`;
+                    const examsUrgent = decodedData.exams.filter(e => e.isUrgency);
+                    const examsNormal = decodedData.exams.filter(e => !e.isUrgency);
+                    
+                    let examesTxt = '';
+                    if (examsUrgent.length > 0) {
+                      examesTxt += `Exames Urgentes - (${examsUrgent.length})\n${examsUrgent.map(e => `- ${e.idExame || e.examCode} - ${e.name}${e.description ? ` (${e.description})` : ''}`).join('\n')}\n\n`;
+                    }
+                    if (examsNormal.length > 0) {
+                      examesTxt += `Exames Normais - (${examsNormal.length})\n${examsNormal.map(e => `- ${e.idExame || e.examCode} - ${e.name}${e.description ? ` (${e.description})` : ''}`).join('\n')}`;
+                    }
+
+                    const txt = `Cód_Leitura: ${codLeitura} - Data Leitura: ${new Date().toLocaleDateString('pt-BR')}\nReferente a: ${decodedData.movimentoId}\n\nPaciente: ${decodedData.pet.nome}\nTutor: ${decodedData.pet.tutor_nome || ''}\nVeterinário: ${decodedData.veterinario.nome}\n\n${examesTxt}`;
                     const blob = new Blob([txt], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -666,27 +728,74 @@ ${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e
 
             {/* EXAMES */}
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <Label className="text-base font-bold">Exames Detectados / Selecionados ({manualExamIds.length})</Label>
-                <div className="flex items-center gap-2">
-                  <Checkbox id="showAll" checked={showAllExams} onCheckedChange={(c) => setShowAllExams(!!c)} />
-                  <label htmlFor="showAll" className="text-xs cursor-pointer">Mostrar todos do catálogo</label>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-100/50 p-3 rounded-lg border">
+                <Label className="text-base font-bold flex items-center gap-2">
+                   <FileText className="w-5 h-5 text-blue-600"/>
+                   Exames ({manualExamIds.length})
+                </Label>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center space-x-2 bg-white p-1 rounded-md border shadow-sm">
+                    <Button 
+                      variant={!showAllExams ? "default" : "ghost"} 
+                      size="sm" 
+                      type="button"
+                      onClick={() => setShowAllExams(false)}
+                      className="h-8 text-xs px-3"
+                    >
+                      {identifiedExamIds.length > 0 ? 'Identificados' : 'Por Plano'}
+                    </Button>
+                    <Button 
+                      variant={showAllExams ? "default" : "ghost"} 
+                      size="sm" 
+                      type="button"
+                      onClick={() => setShowAllExams(true)}
+                      className="h-8 text-xs px-3"
+                    >
+                      Catálogo Completo
+                    </Button>
+                  </div>
                 </div>
               </div>
-              <Input placeholder="Buscar exame no catálogo..." value={manualExamSearch} onChange={e => setManualExamSearch(e.target.value)} />
-              <ScrollArea className="h-[250px] border rounded-md p-4 bg-slate-50/50">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {filteredExams.map(exam => (
-                    <div key={exam.id} className="flex items-start space-x-3 p-2 hover:bg-white rounded-md transition-shadow">
-                      <Checkbox id={exam.id} checked={manualExamIds.includes(exam.id)} onCheckedChange={checked => checked ? setManualExamIds([...manualExamIds, exam.id]) : setManualExamIds(manualExamIds.filter(id => id !== exam.id))} />
-                      <label htmlFor={exam.id} className="text-sm leading-none cursor-pointer">
-                        <span className="font-bold text-blue-600 block mb-1">{exam.idExame || exam.examCode}</span>
-                        {exam.name}
-                      </label>
-                    </div>
-                  ))}
+              
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Buscar exame no catálogo..." value={manualExamSearch} onChange={e => setManualExamSearch(e.target.value)} className="pl-9" />
                 </div>
-              </ScrollArea>
+
+                <ScrollArea className="h-[250px] border rounded-md p-4 bg-slate-50/50">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {filteredExams.map(exam => (
+                      <div key={exam.id} className={`flex items-start space-x-3 p-2 hover:bg-white rounded-md transition-shadow border ${manualExamIds.includes(exam.id) ? 'border-blue-200 bg-blue-50/20' : 'border-transparent'}`}>
+                        <Checkbox id={exam.id} checked={manualExamIds.includes(exam.id)} onCheckedChange={checked => {
+                          if (checked) {
+                            setManualExamIds([...manualExamIds, exam.id]);
+                            // Se estivermos no modo "Apenas lidos", e o usuário marcar um novo manual, adicionamos ao identified para ele não sumir
+                            if (identifiedExamIds.length > 0 && !identifiedExamIds.includes(exam.id)) {
+                               setIdentifiedExamIds([...identifiedExamIds, exam.id]);
+                            }
+                          } else {
+                            setManualExamIds(manualExamIds.filter(id => id !== exam.id));
+                          }
+                        }} />
+                        <label htmlFor={exam.id} className="text-sm leading-none cursor-pointer flex-1">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-bold text-blue-600">{exam.idExame || exam.examCode}</span>
+                            {identifiedExamIds.includes(exam.id) && <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5"/> Lido</span>}
+                          </div>
+                          <div className="font-medium text-[13px]">{exam.name}</div>
+                          {exam.description && <div className="text-[11px] text-muted-foreground italic mt-0.5 leading-tight">{exam.description}</div>}
+                        </label>
+                      </div>
+                    ))}
+                    {filteredExams.length === 0 && (
+                      <div className="col-span-full py-10 text-center text-muted-foreground italic text-sm">
+                        Nenhum exame encontrado para os filtros atuais.
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
           </div>
 

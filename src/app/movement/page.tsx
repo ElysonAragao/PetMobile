@@ -50,7 +50,7 @@ import { useExams } from '@/hooks/use-exams';
 import { useSession } from '@/context/session-context';
 import { useMovement } from '@/hooks/use-movement';
 import { useProntuarios } from '@/hooks/use-prontuarios';
-import { exportToCSV, exportToPDF } from '@/lib/export-utils';
+import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
 
 /**
  * Esquema de validação idêntico ao PacienteMobile, adaptado para terminologia Pet
@@ -483,8 +483,6 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
     const veterinarios = React.useMemo(() => {
         return (users || []).filter(u => 
             u.status === 'MedicoVet' || 
-            u.status === 'Administrador' || 
-            u.status === 'Master' ||
             u.status === 'MedicoVet Geral'
         );
     }, [users]);
@@ -499,38 +497,48 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
             filtered = prontuarios.filter(p => p.medico_id === user.id || p.autor_registro_id === user.id);
         }
 
+        if (selectedPetId) {
+            filtered = filtered.filter(p => p.pet_id === selectedPetId);
+        }
+
         if (vetFilter !== 'all') {
             filtered = filtered.filter(p => p.medico_id === vetFilter);
         }
 
         return filtered;
-    }, [prontuarios, prontLoaded, user, isPrivileged, vetFilter]);
+    }, [prontuarios, prontLoaded, user, isPrivileged, vetFilter, selectedPetId]);
 
-    const handleExport = async (format: 'pdf' | 'csv') => {
+    const handleExport = async (format: 'pdf' | 'csv' | 'txt') => {
         const rows = globalProntuarios.map(pront => {
             const pet = pets.find(p => p.id === pront.pet_id);
             const med = veterinarios.find(v => v.id === pront.medico_id);
             return {
-                'Data Consulta': new Date(pront.data_atendimento).toLocaleDateString('pt-BR'),
+                'Data Consulta': format ? new Date(pront.data_atendimento).toLocaleDateString('pt-BR') : '',
                 'Médico': med?.nome || 'Não inf.',
                 'Tipo': pront.tipo_atendimento,
                 'Cód_Pet': pet?.codPet || '-', 
                 'Nome do Pet': pet?.nome || '-',
                 'Espécie': pet?.especie || '-',
                 'Raça': pet?.raca || '-',
-                'Idade': pet?.idade || '-',
-                'Tutor': pet?.tutorNome || '-',
-                'Tel': pet?.tutorTelefone || '-'
+                'Desc': pront.descricao_livre || '-'
             };
         });
 
+        const selectedPet = pets.find(p => p.id === selectedPetId);
         const vet = vetFilter === 'all' ? null : veterinarios.find(v => v.id === vetFilter);
-        const vetNameStr = vet ? `${vet.nome} - CRMV: ${(vet as any).crmv || 'Não inf.'}` : 'Todos os Médicos';
+        
+        let title = 'Histórico de Atendimentos';
+        if (selectedPet) title += ` - ${selectedPet.nome}`;
+        if (vet) title += ` (${vet.nome})`;
+
+        const filename = `historico_${selectedPet ? selectedPet.nome.toLowerCase() : 'geral'}`;
 
         if (format === 'csv') {
-            await exportToCSV('historico_atendimentos', rows);
+            await exportToCSV(filename, rows);
+        } else if (format === 'txt') {
+            await exportToTXT(filename, rows);
         } else {
-            await exportToPDF('historico_atendimentos', `Histórico: ${vetNameStr}`, rows);
+            await exportToPDF(filename, title, rows);
         }
     };
 
@@ -607,6 +615,9 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => handleExport('csv')} className="h-8">
                                 <Download className="w-4 h-4 mr-2" /> CSV
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleExport('txt')} className="h-8">
+                                <Download className="w-4 h-4 mr-2" /> TXT
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setIsGlobalListOpen(false)} className="h-8">
                                 <Undo2 className="w-4 h-4 mr-2" /> Voltar
