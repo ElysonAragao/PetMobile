@@ -1,5 +1,23 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-04-26] - Suporte Multi-Câmeras e Resiliência de Hardware
+    
+### 🎥 Sistema de Câmeras Híbrido (USB + Integrada)
+- **Seleção Dinâmica de Dispositivos**: Implementada a capacidade de alternar instantaneamente entre a câmera frontal/notebook e webcams USB externas tanto no scanner quanto no visualizador.
+- **Detecção em Tempo Real**: Novo botão "Atualizar Câmeras" que detecta novos dispositivos conectados (Plug & Play) sem precisar recarregar a página.
+- **Visualizador Fullscreen dedicada**: Criada a página `/cameras` que permite testar a qualidade, o enquadramento e a estabilidade de todos os dispositivos de vídeo em tamanho real.
+
+### 🛠️ Estabilização e Tratamento de Hardware (Windows/USB)
+- **Prevenção de Locks de Hardware**: Implementado o gerenciamento agressivo de fluxos (`streamRef`) para garantir que uma câmera seja 100% desligada antes que outra tente iniciar, evitando o erro de "Câmera em uso por outro programa".
+- **Resiliência de Inicialização**: Adicionado um atraso de segurança (500ms) e trava de concorrência (`switchingRef`) para sincronizar a liberação de drivers do sistema operacional durante a troca rápida de dispositivos.
+- **Ajuste de Compatibilidade**: Redução da resolução ideal para 720p com fallback automático, garantindo que webcams USB de diferentes marcas e qualidades funcionem sem travar.
+
+### 🔗 UX e Integração
+- **Atalho no Menu Principal**: Inclusão do card "Visualizar Câmeras" no dashboard para acesso administrativo e médico.
+- **Link Direto no Scanner**: Opção de abrir o visualizador em tela cheia diretamente da interface de escaneamento de QR Code para ajustes finos.
+
+---
+
 ## [2026-04-21] - Planejamento: Prontuário Digital e Documentos Clínicos
 
 ### 🏥 Arquitetura do Prontuário Digital (Proposta Aceita)
