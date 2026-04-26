@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { 
   FileCheck2, Loader2, AlertTriangle, VideoOff, Printer, RefreshCw, 
   Camera, SwitchCamera, Undo2, Download, FileJson, FileCode, FileType, 
-  Search, Edit, Info, PawPrint, Stethoscope, FileText, User, Sparkles, Upload, ScanFace, PlusCircle
+  Search, Edit, Info, PawPrint, Stethoscope, FileText, User, Sparkles, Upload, ScanFace, PlusCircle, Video
 } from 'lucide-react';
 import { PageTitle } from '@/components/layout/page-title';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,20 +70,44 @@ export default function ScanPage() {
   const [ocrStatusText, setOcrStatusText] = React.useState('');
   const ocrFileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [videoDevices, setVideoDevices] = React.useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState<string>('');
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
-  const [facingMode, setFacingMode] = React.useState<'environment' | 'user'>('environment');
   const { toast } = useToast();
 
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  const switchingRef = React.useRef(false);
   const scanIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const isScanActiveRef = React.useRef(true);
 
-  // Hydration fix
   const [mounted, setMounted] = React.useState(false);
+
+  const refreshDevices = React.useCallback(async () => {
+    try {
+      // Pedimos permissão primeiro para garantir que os nomes (labels) das câmeras apareçam
+      const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      tempStream.getTracks().forEach(track => track.stop());
+      const foundDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = foundDevices.filter(device => device.kind === 'videoinput');
+      setVideoDevices(videoInputs);
+    } catch (err) {
+      console.error("Erro ao listar dispositivos de vídeo:", err);
+    }
+  }, []);
+
   React.useEffect(() => {
     setMounted(true);
-  }, []);
+    refreshDevices();
+  }, [refreshDevices]);
+
+  // Efeito para definir a câmera inicial assim que a lista for carregada
+  React.useEffect(() => {
+    if (videoDevices.length > 0 && !selectedDeviceId) {
+      setSelectedDeviceId(videoDevices[0].deviceId);
+    }
+  }, [videoDevices, selectedDeviceId]);
 
   const stopScan = React.useCallback(() => {
     isScanActiveRef.current = false;
@@ -91,9 +115,15 @@ export default function ScanPage() {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+      });
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
   }, []);
@@ -221,20 +251,54 @@ export default function ScanPage() {
     }
   }, [processScannedData]);
 
-  const startCameraStream = React.useCallback(async (mode: 'environment' | 'user') => {
+  const startCameraStream = React.useCallback(async (deviceId: string) => {
+    if (!deviceId || switchingRef.current) return;
+    switchingRef.current = true;
+    
+    // Pequena pausa para garantir que o hardware anterior seja liberado pelo SO
     stopScan();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     isScanActiveRef.current = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
+      streamRef.current = stream;
       setHasCameraPermission(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => videoRef.current?.play();
         scanIntervalRef.current = setInterval(tick, 250);
       }
-    } catch (err) {
-      setHasCameraPermission(false);
-      toast({ variant: "destructive", title: "Câmera não autorizada" });
+    } catch (err: any) {
+      console.error("Erro ao iniciar câmera específica:", err);
+      
+      // Fallback para qualquer configuração daquela câmera
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { deviceId: { exact: deviceId } } 
+        });
+        streamRef.current = stream;
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => videoRef.current?.play();
+          scanIntervalRef.current = setInterval(tick, 250);
+        }
+      } catch (err2: any) {
+        setHasCameraPermission(false);
+        const msg = err2.name === 'NotReadableError' || err2.name === 'TrackStartError'
+          ? "Câmera em uso por outro programa."
+          : "Câmera não autorizada ou indisponível.";
+        toast({ variant: "destructive", title: "Erro na Câmera", description: msg });
+      }
+    } finally {
+      switchingRef.current = false;
     }
   }, [stopScan, tick, toast]);
 
@@ -431,9 +495,11 @@ export default function ScanPage() {
   };
 
   React.useEffect(() => {
-    startCameraStream(facingMode);
+    if (selectedDeviceId) {
+      startCameraStream(selectedDeviceId);
+    }
     return () => stopScan();
-  }, [facingMode, startCameraStream, stopScan]);
+  }, [selectedDeviceId, startCameraStream, stopScan]);
 
   if (!mounted) return null;
 
@@ -451,7 +517,7 @@ export default function ScanPage() {
             <CardDescription>Aponte a câmera para o QR Code ou utilize as opções abaixo (PDF, TXT e Imagem).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="aspect-video w-full bg-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-500 overflow-hidden relative border-4 border-slate-200 shadow-inner">
+            <div className="aspect-video w-full bg-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-500 overflow-hidden relative border-4 border-slate-200 shadow-inner group">
               <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               {isProcessing && (
@@ -460,13 +526,40 @@ export default function ScanPage() {
                   <p className="font-bold tracking-widest uppercase text-xs">Processando...</p>
                 </div>
               )}
+              <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Link href="/cameras">
+                   <Button size="sm" variant="secondary" className="bg-white/80 backdrop-blur text-[10px] h-7 px-2 font-bold uppercase tracking-tight">
+                      <Video className="w-3 h-3 mr-1" /> Tela Cheia
+                   </Button>
+                </Link>
+              </div>
             </div>
 
+            {videoDevices.length > 1 && (
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1.5">
+                  <Camera className="w-3 h-3" /> Selecionar Câmera
+                </Label>
+                <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+                  <SelectTrigger className="h-10 bg-slate-50 border-slate-200">
+                    <SelectValue placeholder="Escolha a câmera..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {videoDevices.map((device, index) => (
+                      <SelectItem key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Câmera ${index + 1}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
-              <Button onClick={() => setFacingMode(m => m === 'environment' ? 'user' : 'environment')} variant="outline" className="h-12">
-                <SwitchCamera className="mr-2 h-4 w-4" /> Trocar Câmera
+              <Button onClick={refreshDevices} variant="outline" className="h-12 border-slate-200 hover:bg-slate-50">
+                <RefreshCw className="mr-2 h-4 w-4" /> Atualizar Câmeras
               </Button>
-              <Button onClick={() => { setDecodedData(null); setCodLeitura(null); startCameraStream(facingMode); }} variant="outline" className="h-12">
+              <Button onClick={() => { setDecodedData(null); setCodLeitura(null); startCameraStream(selectedDeviceId); }} variant="outline" className="h-12 border-slate-200 hover:bg-slate-50 text-blue-600 font-medium">
                 <RefreshCw className="mr-2 h-4 w-4" /> Ler Nova Guia
               </Button>
             </div>
@@ -826,7 +919,7 @@ ${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e
             <Button variant="outline" onClick={() => setShowSuccessDialog(false)} className="flex-1">
               Não, manter nesta tela
             </Button>
-            <Button onClick={() => { setShowSuccessDialog(false); setDecodedData(null); setCodLeitura(null); startCameraStream(facingMode); }} className="bg-indigo-600 hover:bg-indigo-700 flex-1 text-white shadow-md">
+            <Button onClick={() => { setShowSuccessDialog(false); setDecodedData(null); setCodLeitura(null); startCameraStream(selectedDeviceId); }} className="bg-indigo-600 hover:bg-indigo-700 flex-1 text-white shadow-md">
               Sim, Nova Leitura
             </Button>
           </DialogFooter>

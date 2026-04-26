@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen } from 'lucide-react';
+import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
@@ -111,6 +111,13 @@ function HomeContent() {
       href: '/users',
       icon: <UserCog className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
+    },
+    {
+      title: 'Visualizar Câmeras',
+      description: 'Visualize e teste suas câmeras (USB e Integrada).',
+      href: '/cameras',
+      icon: <Video className="h-8 w-8 text-blue-500" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral'],
     }
   ];
 
