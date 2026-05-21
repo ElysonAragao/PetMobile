@@ -287,7 +287,7 @@ function HealthPlanForm({ onFormSubmit, initialData, getNextHealthPlanCode, onCa
           </Button>
           {onCancel && (
             <Button type="button" variant="outline" className="w-full md:w-auto" onClick={onCancel}>
-              Voltar
+              Cancelar
             </Button>
           )}
         </div>

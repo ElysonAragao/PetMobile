@@ -7,13 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FileText, FileX, PlusCircle, Trash2, Edit, ArrowUpDown, Beaker, Scan, AlertTriangle, Undo2, Upload, DollarSign, CheckCircle2, Info, Download } from 'lucide-react';
 import Link from 'next/link';
 
-import { Exam } from '@/lib/types';
+import { Exam, HealthPlan } from '@/lib/types';
 import { useExams, ExamFormValues } from '@/hooks/use-exams';
 import { useHealthPlans } from '@/hooks/use-health-plans';
-import { usePrecos } from '@/hooks/use-precos';
-import { useSession } from '@/context/session-context';
-import { exportToCSV } from '@/lib/export-utils';
-import { format } from 'date-fns';
 import { PageTitle } from '@/components/layout/page-title';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -49,11 +45,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { usePrecos } from '@/hooks/use-precos';
+import { useSession } from '@/context/session-context';
+import { exportToCSV } from '@/lib/export-utils';
+import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useToast } from "@/hooks/use-toast";
 const examSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -121,41 +120,9 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
-        <div>
-          <CardTitle>Exames Cadastrados</CardTitle>
-          <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
-        </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => {
-            const exportData = exams.map(e => ({
-              'Nome_Exame': e.name,
-              'Tipo': e.type,
-              'Descricao': e.description,
-              'ID_Exame': e.idExame || '',
-              'Plano_Saude': e.healthPlanName || 'Particular',
-              'Urgente': e.isUrgency ? 'Sim' : 'Não',
-              'Codigo_Sequencial': e.examCode || ''
-            }));
-            
-            const dataToExport = exportData.length > 0 ? exportData : [{
-              'Nome_Exame': 'Ex: Hemograma',
-              'Tipo': 'Laboratório',
-              'Descricao': 'Coleta de sangue...',
-              'ID_Exame': 'LAB001',
-              'Plano_Saude': 'Todos',
-              'Urgente': 'Não',
-              'Codigo_Sequencial': 'EX00001'
-            }];
-            
-            exportToCSV('modelo_importacao_exames', dataToExport);
-          }}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Exportar CSV (Modelo)
-        </Button>
+      <CardHeader>
+        <CardTitle>Exames Cadastrados</CardTitle>
+        <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
       </CardHeader>
       <CardContent>
         {sortedExams.length > 0 ? (
@@ -187,12 +154,7 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
                     {getSortIndicator('idExame')}
                   </Button>
                 </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('healthPlanName')}>
-                    Plano de Saúde
-                    {getSortIndicator('healthPlanName')}
-                  </Button>
-                </TableHead>
+
                 <TableHead className="text-center">Urgente</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -209,7 +171,7 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
                   <TableCell className="font-medium">{exam.name}</TableCell>
                   <TableCell className="max-w-[300px] truncate">{exam.description}</TableCell>
                   <TableCell className="font-mono text-sm">{exam.idExame || exam.examCode}</TableCell>
-                  <TableCell>{exam.healthPlanName || 'Particular/Sem Plano'}</TableCell>
+
                   <TableCell className="text-center">
                     {exam.isUrgency ? (
                       <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200">Sim 🚨</Badge>
@@ -392,7 +354,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
             )}
           />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
           <FormField
             control={form.control}
             name="idExame"
@@ -406,43 +368,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="healthPlanId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Plano de Saúde (Opcional)</FormLabel>
-                <Select
-                  value={field.value || "none"}
-                  onValueChange={(val) => {
-                    if (val === "none") {
-                      field.onChange(null);
-                      form.setValue('healthPlanName', null);
-                    } else {
-                      field.onChange(val);
-                      const selectedPlan = healthPlans.find(p => p.id === val);
-                      if (selectedPlan) {
-                        form.setValue('healthPlanName', selectedPlan.nome);
-                      }
-                    }
-                  }}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sem Plano / Particular" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="none">Sem Plano / Particular</SelectItem>
-                    {healthPlans.map(hp => (
-                      <SelectItem key={hp.id} value={hp.id}>{hp.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+
         </div>
         <FormField
           control={form.control}
@@ -477,20 +403,10 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
   );
 }
 
-export default function ExamsPage() {
-  const { exams, addExam, updateExam, deleteExam, deleteAllExams, isLoaded, error, getNextExamCode } = useExams();
-  const { healthPlans } = useHealthPlans();
-  const { selectedEmpresaId } = useSession();
-  const [activeTab, setActiveTab] = React.useState("list");
-  const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
-  const [selectedExam, setSelectedExam] = React.useState<Exam | null>(null);
-  const [isImporting, setIsImporting] = React.useState(false);
-  const { toast } = useToast();
-  const tabsListRef = React.useRef<HTMLDivElement>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const ExamPrices = React.useMemo(() => function ExamPricesComp({ examsList, plansList }: { examsList: Exam[], plansList: import('@/lib/types').HealthPlan[] }) {
+function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: HealthPlan[] }) {
     const { precos, fetchPrecos, savePrecosBatch, isLoading } = usePrecos();
+    const { toast } = useToast();
+    const { selectedEmpresaId } = useSession();
     const [selectedPlanId, setSelectedPlanId] = React.useState<string>("sem_plano");
     const [bulkPrices, setBulkPrices] = React.useState<Record<string, string>>({});
     const [hasChanges, setHasChanges] = React.useState(false);
@@ -500,7 +416,7 @@ export default function ExamsPage() {
 
     const filteredExams = React.useMemo(() => {
       if (selectedPlanId === "sem_plano") return [];
-      return examsList.filter(exam => exam.healthPlanId === selectedPlanId);
+      return examsList; // Catálogo unificado: exibe todos os exames
     }, [examsList, selectedPlanId]);
 
     // When a plan is selected, fetch prices and auto-enter edit mode
@@ -760,8 +676,8 @@ export default function ExamsPage() {
                 } else {
                   // Template with some examples if no plan selected
                   exportData = [{
-                    'Nome da Empresa': 'Clinica Vet',
-                    'Nome do Plano': 'Plano Ouro',
+                    'Nome da Empresa': 'Clinica Medica',
+                    'Nome do Plano': 'Pronto Atendimento',
                     'Codigo do Exame': 'EX001',
                     'Nome do Exame': 'Hemograma',
                     'Preco do Exame': '125.50'
@@ -798,62 +714,93 @@ export default function ExamsPage() {
                 <Info className="h-4 w-4 flex-shrink-0" />
                 <span>Edite os preços diretamente nos campos abaixo. Use <kbd className="px-1 py-0.5 bg-white rounded border text-xs font-mono">Enter</kbd> para avançar ao próximo exame. Ao finalizar, clique em <strong>Confirmar Preços</strong>.</span>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">#</TableHead>
-                    <TableHead>Exame</TableHead>
-                    <TableHead className="w-[140px]">Preço (R$)</TableHead>
-                    <TableHead>Preço Anterior</TableHead>
-                    <TableHead>Data Anterior</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExams.map((exam, idx) => {
-                    const precoInfo = precos.find(p => p.exame_id === exam.id);
-                    return (
-                      <TableRow key={exam.id} className="hover:bg-blue-50/30 transition-colors">
-                        <TableCell className="text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
-                        <TableCell>
-                          <div className="font-bold text-sm">{exam.name}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[250px]">{exam.idExame || exam.examCode} — {exam.description}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Input 
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0,00"
-                            value={bulkPrices[exam.id] || ""}
-                            onChange={e => handleBulkPriceChange(exam.id, e.target.value)}
-                            onKeyDown={e => handleKeyDown(e, exam.id)}
-                            onFocus={e => e.target.select()}
-                            ref={el => { priceInputRefs.current[exam.id] = el; }}
-                            className="w-[120px] h-9 text-right font-mono font-semibold"
-                          />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{formatCurrency(precoInfo?.preco_anterior)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{formatDate(precoInfo?.data_preco_anterior)}</TableCell>
+
+              {filteredExams.length > 0 ? (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[100px]">Cod.</TableHead>
+                        <TableHead className="w-[120px]">ID-Exame</TableHead>
+                        <TableHead>Exame</TableHead>
+                        <TableHead className="w-[100px] text-center">Urgência</TableHead>
+                        <TableHead className="w-[180px]">Preço Atual (R$)</TableHead>
+                        <TableHead className="w-[180px]">Última Alteração</TableHead>
+                        <TableHead className="w-[140px] text-right">Anterior</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredExams.map((exam) => {
+                        const priceInfo = precos.find(p => p.exame_id === exam.id);
+                        return (
+                          <TableRow key={exam.id} className="hover:bg-muted/30">
+                            <TableCell className="font-mono text-xs">{exam.examCode}</TableCell>
+                            <TableCell className="font-mono text-xs">{exam.idExame}</TableCell>
+                            <TableCell className="font-medium">{exam.name}</TableCell>
+                            <TableCell className="text-center">
+                              {exam.isUrgency ? (
+                                <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200">Sim</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs italic">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-muted-foreground text-xs">R$</span>
+                                <Input
+                                  ref={el => { priceInputRefs.current[exam.id] = el; }}
+                                  type="text"
+                                  className="pl-8 h-9 font-mono"
+                                  placeholder="0,00"
+                                  value={bulkPrices[exam.id] || ""}
+                                  onChange={(e) => handleBulkPriceChange(exam.id, e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, exam.id)}
+                                />
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {priceInfo ? formatDate(priceInfo.data_preco_atual) : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">
+                              {priceInfo?.preco_anterior ? formatCurrency(priceInfo.preco_anterior) : "-"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12 border rounded-lg border-dashed">
+                  <AlertTriangle className="mx-auto h-8 w-8 text-amber-500 mb-2" />
+                  <p className="text-muted-foreground">Nenhum exame cadastrado especificamente para este plano.</p>
+                </div>
+              )}
             </>
           ) : (
-             <div className="py-10 text-center text-muted-foreground">Por favor, selecione um plano acima para listar e editar os valores.</div>
+            <div className="text-center py-20 border rounded-lg bg-muted/20">
+              <DollarSign className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+              <p className="text-muted-foreground mt-2">Escolha um plano acima para gerenciar os preços.</p>
+            </div>
           )}
-
-          {/* CSV Template Info */}
-          <div className="bg-slate-50 border rounded-lg p-4 text-sm space-y-2">
-            <p className="font-bold text-slate-700 flex items-center gap-2"><Upload className="h-4 w-4" /> Modelo CSV para Importação de Preços:</p>
-            <code className="block bg-white p-2 rounded border text-xs font-mono text-slate-600 whitespace-pre">Nome da Empresa;Nome do Plano;Codigo do Exame;Nome do Exame;Preco do Exame{'\n'}Clinica Vet;Plano Ouro;EX001;Hemograma;125.50{'\n'}Clinica Vet;Plano Ouro;EX002;Ultrassom;89.00</code>
-            <p className="text-xs text-muted-foreground italic">O sistema encontrará o plano e os exames pelos nomes ou códigos informados. O sistema moverá o preço existente para &quot;Preço Anterior&quot; automaticamente.</p>
-          </div>
         </CardContent>
       </Card>
     );
-  }, []);
+  }
+
+export default function ExamsPage() {
+  const { exams, addExam, updateExam, deleteExam, deleteAllExams, isLoaded, error, getNextExamCode } = useExams();
+  const { healthPlans } = useHealthPlans();
+  const { selectedEmpresaId } = useSession();
+  const [activeTab, setActiveTab] = React.useState("list");
+  const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+  const [selectedExam, setSelectedExam] = React.useState<Exam | null>(null);
+  const [isImporting, setIsImporting] = React.useState(false);
+  const { toast } = useToast();
+  const tabsListRef = React.useRef<HTMLDivElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+
 
   const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -893,7 +840,6 @@ export default function ExamsPage() {
       const colNome = findCol('nome do exame', 'nome_exame', 'nomeexame', 'nome');
       const colDescricao = findCol('descricao', 'descrição');
       const colPlano = findCol('plano de saude', 'plano_saude', 'planosaud', 'plano');
-      const colUrgente = findCol('urgente', 'urgência', 'urgencia');
 
       if (colNome === -1) {
         toast({ title: "Erro no CSV", description: "Cabeçalho não encontrado: 'Nome do Exame' ou 'Nome'. Verifique o arquivo.", variant: "destructive" });
@@ -915,7 +861,6 @@ export default function ExamsPage() {
         const idExame = colIdExame !== -1 ? cols[colIdExame]?.trim() : '';
         const descricao = colDescricao !== -1 ? cols[colDescricao]?.trim() : nome;
         const planoSaudeNome = colPlano !== -1 ? cols[colPlano]?.trim() : '';
-        const urgenteRaw = colUrgente !== -1 ? cols[colUrgente]?.trim() : '';
 
         if (!nome) continue; // Skip empty rows
 
@@ -932,12 +877,6 @@ export default function ExamsPage() {
 
         // Map tipo: default to Laboratório if not recognized
         const tipo = (normalize(tipoRaw) === 'imagem') ? 'Imagem' as const : 'Laboratório' as const;
-        
-        let isUrgencyValue = false;
-        if (urgenteRaw) {
-           const normUrgency = normalize(urgenteRaw);
-           isUrgencyValue = normUrgency === 'sim' || normUrgency === 's' || normUrgency === 'true' || normUrgency === '1';
-        }
 
         try {
           await addExam({
@@ -947,7 +886,7 @@ export default function ExamsPage() {
             description: descricao || nome,
             healthPlanId: healthPlanId,
             healthPlanName: healthPlanName,
-            isUrgency: isUrgencyValue
+            isUrgency: false,
           });
           successCount++;
         } catch (err) {
@@ -1050,7 +989,7 @@ export default function ExamsPage() {
         <div className="flex items-center gap-2">
           <input
             type="file"
-            accept=".csv, .txt"
+            accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
             ref={fileInputRef}
             onChange={handleImportCSV}
             className="hidden"
@@ -1105,9 +1044,6 @@ export default function ExamsPage() {
         <TabsContent value="list" className="mt-6">
           <ExamList exams={exams} isLoaded={isLoaded} onEdit={handleOpenEditDialog} onDelete={handleDeleteExam} />
         </TabsContent>
-        <TabsContent value="prices" className="mt-6">
-          <ExamPrices examsList={exams} plansList={healthPlans} />
-        </TabsContent>
         <TabsContent value="register" className="mt-6">
           <Card>
             <CardHeader>
@@ -1118,6 +1054,9 @@ export default function ExamsPage() {
               <ExamForm onFormSubmit={handleAddExam} getNextExamCode={getNextExamCode} />
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="prices" className="mt-6">
+          <ExamPrices examsList={exams} plansList={healthPlans} />
         </TabsContent>
       </Tabs>
 
@@ -1134,7 +1073,7 @@ export default function ExamsPage() {
               Modifique os dados do exame abaixo. O código e o tipo não podem ser alterados.
             </DialogDescription>
           </DialogHeader>
-          <ExamForm onFormSubmit={handleUpdateExam} initialData={selectedExam ?? undefined} getNextExamCode={getNextExamCode} onCancel={() => setIsEditDialogOpen(false)} />
+          <ExamForm onFormSubmit={handleUpdateExam} initialData={selectedExam ?? undefined} getNextExamCode={getNextExamCode} />
         </DialogContent>
       </Dialog>
     </>

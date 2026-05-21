@@ -198,7 +198,7 @@ function UserList({ users, isLoaded, onEdit, onDelete }: { users: Usuario[], isL
   );
 }
 
-function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSubmit: (values: any) => Promise<any>, isEditMode?: boolean, initialData?: Partial<Usuario & { dataValidade: Date | string }> }) {
+function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: { onFormSubmit: (values: any) => Promise<any>, isEditMode?: boolean, initialData?: Partial<Usuario & { dataValidade: Date | string }>, onCancel?: () => void }) {
   const { user: currentUser } = useSession();
 
   const form = useForm<z.infer<typeof userFormSchema>>({
@@ -398,9 +398,16 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData }: { onFormSub
           />
         </div>
 
-        <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? 'Salvando...' : (<>{isEditMode ? 'Salvar Alterações' : 'Cadastrar Usuário'}</>)}
-        </Button>
+        <div className="flex flex-col md:flex-row gap-3">
+          <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? 'Salvando...' : (<>{isEditMode ? 'Salvar Alterações' : 'Cadastrar Usuário'}</>)}
+          </Button>
+          {onCancel && (
+            <Button type="button" variant="outline" className="w-full md:w-auto" onClick={onCancel}>
+              Cancelar
+            </Button>
+          )}
+        </div>
       </form>
     </Form>
   );
@@ -548,7 +555,7 @@ export default function UsersPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => { if (!isOpen) setSelectedUser(null); setIsEditDialogOpen(isOpen); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Usuário</DialogTitle><DialogDescription>Modifique os dados do usuário abaixo. O e-mail não pode ser alterado.</DialogDescription></DialogHeader>
-          <UserForm onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} />
+          <UserForm onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} onCancel={() => setIsEditDialogOpen(false)} />
           {selectedUser && (
              <BotaoMudarSenha usuarioIdAlvo={selectedUser.id} />
           )}

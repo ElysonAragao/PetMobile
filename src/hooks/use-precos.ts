@@ -22,7 +22,7 @@ export function usePrecos() {
   const fetchPrecos = useCallback(async (planoId?: string) => {
     setIsLoading(true);
     try {
-      let query = supabase.from('pet_precos_exames').select('*');
+      let query = supabase.from('precos_exames').select('*');
       if (planoId) {
         query = query.eq('plano_id', planoId);
       }
@@ -37,12 +37,12 @@ export function usePrecos() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   const savePreco = useCallback(async (planoId: string, exameId: string, novoPreco: number) => {
     try {
       const { data: existing, error: searchError } = await supabase
-        .from('pet_precos_exames')
+        .from('precos_exames')
         .select('*')
         .eq('plano_id', planoId)
         .eq('exame_id', exameId)
@@ -53,7 +53,7 @@ export function usePrecos() {
       if (existing) {
         if (Number(existing.preco_atual) !== Number(novoPreco)) {
            const { error: updateError } = await supabase
-            .from('pet_precos_exames')
+            .from('precos_exames')
             .update({
               preco_anterior: existing.preco_atual,
               data_preco_anterior: existing.data_preco_atual,
@@ -66,7 +66,7 @@ export function usePrecos() {
         }
       } else {
         const { error: insertError } = await supabase
-          .from('pet_precos_exames')
+          .from('precos_exames')
           .insert([{
              plano_id: planoId,
              exame_id: exameId,
@@ -98,12 +98,32 @@ export function usePrecos() {
     return { success: true, successCount, failCount };
   }, [savePreco, fetchPrecos]);
 
+  const fetchPrecosBatch = useCallback(async (planoIds: string[]) => {
+    setIsLoading(true);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('precos_exames')
+        .select('*')
+        .in('plano_id', planoIds);
+      if (fetchError) throw fetchError;
+      setPrecos(data || []);
+      setIsLoaded(true);
+      return { success: true, data };
+    } catch (err: any) {
+      setError(err);
+      return { success: false, message: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase]);
+
   return {
     precos,
     isLoaded,
     isLoading,
     error,
     fetchPrecos,
+    fetchPrecosBatch,
     savePreco,
     savePrecosBatch
   };

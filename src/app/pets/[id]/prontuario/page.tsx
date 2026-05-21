@@ -23,6 +23,7 @@ import { usePets } from '@/hooks/use-pets';
 import { useUsers } from '@/hooks/use-user-management';
 import { useProntuarios, ProntuarioInsert, Prontuario } from '@/hooks/use-prontuarios';
 import { useDocumentos, DocumentoInsert } from '@/hooks/use-documentos';
+import { useModelos } from '@/hooks/use-modelos';
 import { useSession } from '@/context/session-context';
 import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
 
@@ -33,6 +34,7 @@ export default function ProntuarioPage() {
   const { users, isLoaded: usersLoaded } = useUsers();
   const { prontuarios, isLoaded: prontLoaded, addProntuario, updateProntuario, deleteProntuario } = useProntuarios(id);
   const { documentos, isLoaded: docsLoaded, addDocumento } = useDocumentos();
+  const { modelos, isLoaded: modelosLoaded } = useModelos();
   const { user, isMaster } = useSession();
   const { toast } = useToast();
 
@@ -73,6 +75,24 @@ export default function ProntuarioPage() {
       metadata: {}
     }
   });
+
+  const applyModelo = (modeloId: string, isProntuario: boolean) => {
+      const modelo = modelos.find(m => m.id === modeloId);
+      if (!modelo) return;
+      
+      let text = modelo.conteudo;
+      text = text.replace(/\{pet\}|\[pet\]|\{nome\}|\[nome\]|\{paciente\}|\[paciente\]/gi, pet?.nome || '');
+      text = text.replace(/\{data\}|\[data\]/gi, format(new Date(), 'dd/MM/yyyy'));
+      text = text.replace(/\{tutor\}|\[tutor\]/gi, pet?.tutorNome || '');
+      text = text.replace(/\{cpf\}|\[cpf\]/gi, pet?.tutorCpf || '');
+      text = text.replace(/\{especie\}|\[especie\]/gi, pet?.especie || '');
+      
+      if (isProntuario) {
+          formProntuario.setValue('descricao_livre', text);
+      } else {
+          formDoc.setValue('conteudo', text);
+      }
+  };
 
   React.useEffect(() => {
     if (user?.id && !editingProntuario && !canSelectMedico) {
@@ -119,7 +139,7 @@ export default function ProntuarioPage() {
       }
   };
 
-  if (!petsLoaded || !prontLoaded || !docsLoaded || !usersLoaded) {
+  if (!petsLoaded || !prontLoaded || !docsLoaded || !usersLoaded || !modelosLoaded) {
     return <div className="p-8 text-center"><Activity className="animate-spin h-8 w-8 mx-auto mb-4" />Carregando prontuário...</div>;
   }
 
@@ -542,7 +562,17 @@ export default function ProntuarioPage() {
                 name="descricao_livre"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Evolução Técnica / Laudo</FormLabel>
+                    <div className="flex justify-between items-center">
+                        <FormLabel>Evolução Técnica / Laudo</FormLabel>
+                        <Select onValueChange={(val) => applyModelo(val, true)}>
+                            <SelectTrigger className="w-[180px] h-7 text-xs border-dashed bg-slate-50"><SelectValue placeholder="Usar Modelo Padrão" /></SelectTrigger>
+                            <SelectContent>
+                                {modelos.filter(m => ['Laudo', 'Outros', 'Atestado'].includes(m.tipo)).map(m => (
+                                    <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                     <FormControl>
                       <Textarea placeholder="Descreva sinais, anamneses..." className={`min-h-[150px] font-medium leading-relaxed ${editMode==='adendo' ? 'bg-amber-50 focus-visible:ring-amber-400 border-amber-200' : ''}`} {...field} value={field.value || ''} />
                     </FormControl>
@@ -564,7 +594,8 @@ export default function ProntuarioPage() {
                 )}
               />
               
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsProntuarioOpen(false)}>Cancelar</Button>
                 <Button type="submit" variant={editMode === 'adendo' ? 'secondary' : 'default'} className={editMode === 'adendo' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold' : ''}>
                     {editMode === 'new' ? 'Salvar Registro' : 'Confirmar Atualização'}
                 </Button>
@@ -634,7 +665,17 @@ export default function ProntuarioPage() {
                 name="conteudo"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Texto Completo (Sairá exatamente assim na Impressão)</FormLabel>
+                    <div className="flex justify-between items-center">
+                        <FormLabel>Texto Completo (Sairá exatamente assim na Impressão)</FormLabel>
+                        <Select onValueChange={(val) => applyModelo(val, false)}>
+                            <SelectTrigger className="w-[180px] h-7 text-xs border-dashed bg-slate-50"><SelectValue placeholder="Usar Modelo Padrão" /></SelectTrigger>
+                            <SelectContent>
+                                {modelos.filter(m => ['Receita', 'Atestado', 'Encaminhamento', 'Outros'].includes(m.tipo)).map(m => (
+                                    <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                     <FormControl>
                     <Textarea placeholder="Digite o conteúdo aqui..." className="min-h-[250px] font-mono text-sm leading-relaxed whitespace-pre-wrap bg-slate-50" {...field} value={field.value || ''} />
                     </FormControl>
@@ -642,7 +683,8 @@ export default function ProntuarioPage() {
                 </FormItem>
                 )}
             />
-            <div className="flex justify-end pt-4">
+            <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsDocOpen(false)}>Cancelar</Button>
                 <Button type="submit"><Printer className="w-4 h-4 mr-2" /> Gerar Prédio Final</Button>
             </div>
             </form>

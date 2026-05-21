@@ -4,15 +4,17 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload, Download } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload, Download, FileText, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 import { Veterinario } from '@/lib/types';
 import { useVeterinarios, VeterinarioFormValues } from '@/hooks/use-veterinarios';
 import { exportToCSV } from '@/lib/export-utils';
+import { ModelosManager } from '@/components/modelos/modelos-manager';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -52,7 +54,26 @@ const veterinarioSchema = z.object({
   email: z.string().email("E-mail inválido").or(z.literal('')).optional().default(''),
   telefone: z.string().optional().default(''),
   codVet: z.string().optional(),
+  especialidade: z.string().optional().default('Geral'),
+  prontuario_liberado: z.boolean().optional().default(false),
+  validade_prontuario: z.string().or(z.literal('')).nullable().optional().default(''),
+  validade_acesso: z.string().or(z.literal('')).nullable().optional().default(''),
 });
+
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return '-';
+  try {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+function isDateExpired(dateStr?: string | null): boolean {
+  if (!dateStr) return false;
+  return new Date(dateStr) < new Date();
+}
 
 function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterinarios: Veterinario[], isLoaded: boolean, onEdit: (vet: Veterinario) => void, onDelete: (id: string) => void }) {
   const [sortConfig, setSortConfig] = React.useState<{key: keyof Veterinario, direction: 'asc' | 'desc'} | null>(null);
@@ -70,6 +91,40 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
   }, [veterinarios, sortConfig]);
 
   if (!isLoaded) return <div className="space-y-4">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>;
+
+  const ProntuarioBadge = ({ vet }: { vet: Veterinario }) => {
+    if (!vet.prontuario_liberado) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          <XCircle className="h-3.5 w-3.5 text-red-400" /> Não
+        </span>
+      );
+    }
+    const expired = isDateExpired(vet.validade_prontuario);
+    const dateLabel = vet.validade_prontuario ? formatDate(vet.validade_prontuario) : 'Indeterminado';
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs font-medium ${
+        expired ? 'text-red-500' : 'text-emerald-600'
+      }`}>
+        {expired ? <Clock className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        {expired ? `Expirado (${dateLabel})` : dateLabel}
+      </span>
+    );
+  };
+
+  const ValidadeAcessoBadge = ({ vet }: { vet: Veterinario }) => {
+    if (!vet.validade_acesso) return <span className="text-xs text-muted-foreground">-</span>;
+    const expired = isDateExpired(vet.validade_acesso);
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs font-medium ${
+        expired ? 'text-red-500' : 'text-slate-700 dark:text-slate-300'
+      }`}>
+        {expired && <Clock className="h-3.5 w-3.5" />}
+        {formatDate(vet.validade_acesso)}
+        {expired && <span className="text-red-400">(exp.)</span>}
+      </span>
+    );
+  };
 
   return (
     <Card>
@@ -113,8 +168,11 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
                 <TableHead>Código</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>CRMV</TableHead>
+                <TableHead>Especialidade</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Telefone</TableHead>
+                <TableHead>Validade Acesso</TableHead>
+                <TableHead>Prontuário</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -124,8 +182,11 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
                   <TableCell>{vet.codVet}</TableCell>
                   <TableCell className="font-medium">{vet.nome}</TableCell>
                   <TableCell>{vet.crmv}</TableCell>
+                  <TableCell>{vet.especialidade || 'Geral'}</TableCell>
                   <TableCell>{vet.email || '-'}</TableCell>
                   <TableCell>{vet.telefone || '-'}</TableCell>
+                  <TableCell><ValidadeAcessoBadge vet={vet} /></TableCell>
+                  <TableCell><ProntuarioBadge vet={vet} /></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => onEdit(vet)}><Edit className="h-4 w-4" /></Button>
                     <AlertDialog>
@@ -205,9 +266,10 @@ export default function VeterinariosPage() {
       </PageTitle>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
-          <TabsTrigger value="list">Listar Veterinários</TabsTrigger>
-          <TabsTrigger value="register">Novo Veterinário</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
+          <TabsTrigger value="list"><Stethoscope className="mr-2 h-4 w-4" />Listar Veterinários</TabsTrigger>
+          <TabsTrigger value="register"><PlusCircle className="mr-2 h-4 w-4" />Novo Veterinário</TabsTrigger>
+          <TabsTrigger value="modelos"><FileText className="mr-2 h-4 w-4" />Modelos</TabsTrigger>
         </TabsList>
         <TabsContent value="list" className="mt-6">
           <VeterinarioList 
@@ -236,20 +298,50 @@ export default function VeterinariosPage() {
                     <FormField control={form.control} name="telefone" render={({ field }) => (
                       <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
+                    <FormField control={form.control} name="especialidade" render={({ field }) => (
+                      <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input placeholder="Ex: Cardiologia" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
                   </div>
+                  
+                  <div className="border border-amber-200/50 bg-amber-50/20 dark:bg-amber-950/10 dark:border-amber-900/30 rounded-xl p-5 space-y-4 my-4">
+                    <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Acesso e Permissões</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                      <FormField control={form.control} name="validade_acesso" render={({ field }) => (
+                        <FormItem><FormLabel>Validade de Acesso do Veterinário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                      <FormField control={form.control} name="prontuario_liberado" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border border-input p-3 bg-white/50 dark:bg-slate-900/50 shadow-sm h-11">
+                          <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado</FormLabel></div>
+                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="validade_prontuario" render={({ field }) => (
+                        <FormItem><FormLabel>Validade da Liberação do Prontuário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                  </div>
+
                   <Button type="submit" disabled={form.formState.isSubmitting}>Cadastrar Veterinário</Button>
                 </form>
               </Form>
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="modelos" className="mt-6">
+          <ModelosManager />
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Veterinário</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] flex flex-col p-0">
+          <div className="p-6 pb-2">
+            <DialogHeader><DialogTitle>Editar Veterinário</DialogTitle></DialogHeader>
+          </div>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(handleFormSubmit)} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 space-y-6 pb-2">
               <FormField control={form.control} name="nome" render={({ field }) => (
                 <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
@@ -262,9 +354,34 @@ export default function VeterinariosPage() {
               <FormField control={form.control} name="telefone" render={({ field }) => (
                 <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
-              <div className="flex flex-col md:flex-row gap-3">
+              <FormField control={form.control} name="especialidade" render={({ field }) => (
+                <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              
+              <div className="border border-amber-200/50 bg-amber-50/20 dark:bg-amber-950/10 dark:border-amber-900/30 rounded-xl p-5 space-y-4 my-4">
+                <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Acesso e Permissões</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                  <FormField control={form.control} name="validade_acesso" render={({ field }) => (
+                    <FormItem><FormLabel>Validade de Acesso do Veterinário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                  <FormField control={form.control} name="prontuario_liberado" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border border-input p-3 bg-white/50 dark:bg-slate-900/50 shadow-sm h-11">
+                      <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado</FormLabel></div>
+                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="validade_prontuario" render={({ field }) => (
+                    <FormItem><FormLabel>Validade da Liberação do Prontuário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+              </div>
+
+              </div>
+              <div className="flex flex-col md:flex-row gap-3 p-6 pt-4 border-t bg-slate-50 dark:bg-slate-900 mt-auto">
                 <Button type="submit">Salvar Alterações</Button>
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Voltar</Button>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
               </div>
             </form>
           </Form>

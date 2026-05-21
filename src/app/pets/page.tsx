@@ -480,7 +480,7 @@ function PetForm({
               className="w-full md:w-auto"
               onClick={onCancel}
             >
-              Voltar
+              Cancelar
             </Button>
           )}
         </div>

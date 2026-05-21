@@ -64,6 +64,13 @@ export default function ScanPage() {
   const [showAllExams, setShowAllExams] = React.useState(false);
   const [identifiedExamIds, setIdentifiedExamIds] = React.useState<string[]>([]);
 
+  // ── Webcam capture (leitura de documento impresso no notebook) ──
+  const [isWebcamCaptureOpen, setIsWebcamCaptureOpen] = React.useState(false);
+  const [webcamStream, setWebcamStream] = React.useState<MediaStream | null>(null);
+  const [webcamError, setWebcamError] = React.useState<string | null>(null);
+  const webcamVideoRef = React.useRef<HTMLVideoElement>(null);
+  const webcamCanvasRef = React.useRef<HTMLCanvasElement>(null);
+
   // OCR state
   const [isOcrProcessing, setIsOcrProcessing] = React.useState(false);
   const [ocrProgress, setOcrProgress] = React.useState(0);
@@ -401,12 +408,7 @@ export default function ScanPage() {
         
       } else if (file.type === 'text/plain') {
         setOcrStatusText('Lendo conteúdo do arquivo de texto...');
-        extractedText = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = reject;
-          reader.readAsText(file);
-        });
+        extractedText = await file.text();
 
       } else if (file.type.startsWith('image/')) {
         setOcrStatusText('Iniciando análise inteligente da imagem...');
@@ -425,18 +427,23 @@ export default function ScanPage() {
         throw new Error("Formato de arquivo não suportado.");
       }
       
+      console.log("TEXTO LIDO/EXTRAÍDO:", extractedText);
       setOcrStatusText('Procurando exames correspondentes...');
 
-      const fuse = new Fuse(exams, {
-        keys: [
-          { name: 'name', weight: 0.6 },
-          { name: 'description', weight: 0.2 },
-          { name: 'examCode', weight: 1.0 },
-          { name: 'idExame', weight: 1.0 }
-        ],
-        threshold: 0.2,
+      // Filtra exames apenas para o plano de saúde do Pet selecionado (ou exames globais)
+      // Isso elimina os falsos positivos de achar 3 exames iguais de planos diferentes
+      let targetExams = exams;
+      const petPlan = currentPetData?.healthPlanName?.trim().toLowerCase();
+      if (petPlan) {
+         targetExams = exams.filter(e => !e.healthPlanName || e.healthPlanName.trim() === '' || e.healthPlanName.trim().toLowerCase() === petPlan);
+      }
+
+      const fuse = new Fuse(targetExams, {
+        keys: ['name', 'examCode', 'idExame'],
+        threshold: 0.35, // Tolerância reduzida para evitar falsos positivos (como ler descrições)
         includeScore: true,
         ignoreLocation: true,
+        ignoreFieldNorm: true, // CRUCIAL: não penaliza se a linha lida for mais comprida que o nome do exame
       });
       
       const matchedExamIds = new Set<string>();
@@ -445,35 +452,67 @@ export default function ScanPage() {
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toUpperCase()
-        .replace(/\s*[\u2013\u2014]\s*/g, " - ")
+        .replace(/\s*[–—]\s*/g, " - ") 
         .replace(/\s{2,}/g, " ");
         
       const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 2);
       
       lines.forEach(line => {
-        const words = line.split(/[\s,;\-]+/).filter(w => w.length >= 3);
+        // Ignora linhas secundárias que contêm apenas descrições para não gerar falsos positivos
+        if (line.startsWith('DESCRICAO') || line.startsWith('DESCRIÇÃO') || line.startsWith('OBSERVAÇÃO') || line.startsWith('OBSERVACAO')) return;
+        
         let foundByExactCode = false;
 
-        // 1. Tenta Match Exato por Código Primeiro (Alta Precisão)
+        // 1. Tenta Match Exato por Código Primeiro (per word)
+        const words = line.split(/[\s,;\-]+/).filter(w => w.length >= 3);
         for (const word of words) {
-          const exactMatch = exams.find(e => 
+          const exactMatch = targetExams.filter(e => 
             (e.examCode && e.examCode.toUpperCase() === word.toUpperCase()) || 
             (e.idExame && e.idExame.toUpperCase() === word.toUpperCase())
           );
           
-          if (exactMatch) {
-            matchedExamIds.add(exactMatch.id);
+          if (exactMatch.length > 0) {
+            exactMatch.forEach(e => matchedExamIds.add(e.id));
             foundByExactCode = true;
           }
         }
+        
+        if (foundByExactCode) return;
 
-        // 2. Se NÃO encontrou por código exato, tenta busca difusa na linha
-        if (!foundByExactCode) {
-          const results = fuse.search(line);
-          if (results.length > 0 && results[0].score !== undefined && results[0].score < 0.2) {
-             matchedExamIds.add(results[0].item.id);
-          }
+        // 2. Busca Substring Exata (Resolve o problema de pular exames em arquivos TXT/PDF)
+        // Se o nome do exame está contido na linha (ex: "HEMOGRAMA COMPLETO" dentro de "01 - HEMOGRAMA COMPLETO (SANGUE)")
+        const lineUpper = line.toUpperCase();
+        const substringMatches = targetExams.filter(e => {
+            const examNameUpper = e.name.toUpperCase().trim();
+            // Requer um nome de exame com pelo menos 4 caracteres para evitar falso positivo com sílabas
+            return examNameUpper.length >= 4 && lineUpper.includes(examNameUpper);
+        });
+
+        if (substringMatches.length > 0) {
+            substringMatches.forEach(e => matchedExamIds.add(e.id));
+            return;
         }
+
+        // 3. Limpeza blindada da linha e Busca Difusa Restrita (Evita falso positivos, ex: Ureia x Urina)
+              let cleanedLine = line.replace(/^[\d\s\.\-,;:]+/, ''); // Remove "1. ", ou "20301400 - " se lido perfeitamente
+              
+              // Se sobrou um código mal lido (ex: 2O3014OO - ), remove a primeira palavra se tiver pelo menos um dígito
+              cleanedLine = cleanedLine.replace(/^[A-Z]*\d[A-Z0-9]*[\s\.\-,;:]+/i, '');
+              
+              // Remove a palavra (Laboratório) e sujeiras finais
+              cleanedLine = cleanedLine
+                .replace(/\(?LABORAT[O0]R[I1l][O0]\)?/gi, '')
+                .replace(/[^A-Z0-9 ]/gi, ' ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+              
+              if (cleanedLine.length >= 4) {
+                 const retryResults = fuse.search(cleanedLine);
+                 // Threshold rigoroso (0.25) para evitar confusão entre exames parecidos
+                 if (retryResults.length > 0 && retryResults[0].score !== undefined && retryResults[0].score <= 0.25) {
+                    matchedExamIds.add(retryResults[0].item.id);
+                 }
+              }
       });
 
       if (matchedExamIds.size > 0) {
@@ -493,6 +532,90 @@ export default function ScanPage() {
       setOcrProgress(0);
     }
   };
+
+  const startWebcamCapture = React.useCallback(async (targetDeviceId?: string) => {
+    setWebcamError(null);
+    stopScan();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    setIsWebcamCaptureOpen(true);
+    
+    const deviceToUse = typeof targetDeviceId === 'string' ? targetDeviceId : selectedDeviceId;
+
+    try {
+      let stream: MediaStream;
+      try {
+        if (deviceToUse) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: deviceToUse }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+        } else {
+          throw new Error("No specific device");
+        }
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+        }
+      }
+      setWebcamStream(stream);
+      setTimeout(() => {
+        if (webcamVideoRef.current) {
+          webcamVideoRef.current.srcObject = stream;
+          webcamVideoRef.current.play();
+        }
+      }, 100);
+    } catch (err: any) {
+      setWebcamError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+    }
+  }, [stopScan, selectedDeviceId]);
+
+  const stopWebcamCapture = React.useCallback(() => {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      setWebcamStream(null);
+    }
+    setIsWebcamCaptureOpen(false);
+    setWebcamError(null);
+    if (selectedDeviceId) {
+      setTimeout(() => startCameraStream(selectedDeviceId), 300);
+    }
+  }, [webcamStream, selectedDeviceId, startCameraStream]);
+
+  const captureWebcamFrame = React.useCallback(async () => {
+    const video = webcamVideoRef.current;
+    const canvas = webcamCanvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth * 1.5;
+    canvas.height = video.videoHeight * 1.5;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
+    ctx.scale(1.5, 1.5);
+    ctx.drawImage(video, 0, 0);
+
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      setWebcamStream(null);
+    }
+    setIsWebcamCaptureOpen(false);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const fakeFile = new File([blob], 'captura_webcam.jpg', { type: 'image/jpeg' });
+      const fakeEvent = { target: { files: [fakeFile] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      await handleOcrImageUpload(fakeEvent);
+      if (selectedDeviceId) {
+        setTimeout(() => startCameraStream(selectedDeviceId), 500);
+      }
+    }, 'image/jpeg', 0.95);
+  }, [webcamStream, selectedDeviceId, startCameraStream, handleOcrImageUpload]);
 
   React.useEffect(() => {
     if (selectedDeviceId) {
@@ -797,24 +920,95 @@ ${decodedData.exams.map((e: any) => `    <Exame>${e.idExame || e.examCode} - ${e
 
             <Separator />
 
-            {/* LEITURA INTELIGENTE (UPLOAD) */}
-            <div className={`p-4 rounded-lg border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${manualPetId && manualVetId ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
-               <div className="text-sm">
+            {/* LEITURA INTELIGENTE (UPLOAD) E WEBCAM */}
+            <div className={`p-4 rounded-lg border flex flex-col items-start gap-4 transition-colors ${manualPetId && manualVetId ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+               <div className="text-sm w-full">
                   <span className="font-bold flex items-center gap-1"><Sparkles className="w-4 h-4 text-indigo-600"/> Leitura Inteligente (Recepção)</span>
                   <p className="text-slate-600 mt-1">
                      {!manualPetId || !manualVetId 
                         ? 'Selecione o Pet e o Veterinário Acima para liberar o envio do arquivo.'
-                        : 'Importe o PDF, Imagem ou TXT para a IA processar os exames.'}
+                        : 'Importe o PDF, Imagem/TXT ou fotografe o documento impresso para a IA processar os exames.'}
                   </p>
                </div>
-               <Button 
-                onClick={() => ocrFileInputRef.current?.click()} 
-                disabled={!manualPetId || !manualVetId || isOcrProcessing}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto shadow-sm"
-               >
-                 {isOcrProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileType className="mr-2 h-4 w-4" />}
-                 Selecionar Arquivo
-               </Button>
+               
+               <div className="w-full flex flex-col md:flex-row gap-2">
+                 <Button 
+                  onClick={() => ocrFileInputRef.current?.click()} 
+                  disabled={!manualPetId || !manualVetId || isOcrProcessing}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex-1 shadow-sm"
+                 >
+                   {isOcrProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileType className="mr-2 h-4 w-4" />}
+                   Selecionar Arquivo (PDF/TXT/IMG)
+                 </Button>
+
+                 {!isWebcamCaptureOpen && (
+                   <Button
+                     type="button"
+                     variant="outline"
+                     onClick={() => startWebcamCapture()}
+                     disabled={isOcrProcessing || !manualPetId || !manualVetId}
+                     className="flex-1 border-indigo-300 text-indigo-700 hover:bg-indigo-50 gap-2"
+                   >
+                     <Camera className="h-4 w-4" />
+                     Fotografar Documento
+                   </Button>
+                 )}
+               </div>
+
+               {/* Preview da webcam para captura */}
+               {isWebcamCaptureOpen && (
+                 <div className="w-full space-y-2 mt-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                   {webcamError ? (
+                     <div className="space-y-2">
+                       <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                         <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                         <span>{webcamError}</span>
+                       </div>
+                       <div className="flex gap-2">
+                         <Button type="button" variant="outline" onClick={() => startWebcamCapture()} className="flex-1 gap-2 text-indigo-700 border-indigo-300"><Camera className="h-4 w-4" />Tentar Novamente</Button>
+                         <Button type="button" variant="ghost" onClick={() => { setIsWebcamCaptureOpen(false); setWebcamError(null); }} className="flex-1">Cancelar</Button>
+                       </div>
+                     </div>
+                   ) : (
+                     <>
+                       {videoDevices.length > 0 && (
+                         <Select 
+                           value={selectedDeviceId} 
+                           onValueChange={(val) => {
+                             setSelectedDeviceId(val);
+                             if (webcamStream) { webcamStream.getTracks().forEach(t => t.stop()); }
+                             setTimeout(() => startWebcamCapture(val), 200);
+                           }}
+                         >
+                           <SelectTrigger className="h-9 text-xs mb-2 bg-white/50">
+                             <SelectValue placeholder="Selecione a câmera" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {videoDevices.map((device) => (
+                               <SelectItem key={device.deviceId} value={device.deviceId}>
+                                 {device.label || `Câmera ${device.deviceId.substring(0, 5)}...`}
+                               </SelectItem>
+                             ))}
+                           </SelectContent>
+                         </Select>
+                       )}
+                       <div className="relative rounded-xl overflow-hidden bg-black border border-indigo-200 shadow-md">
+                         <video ref={webcamVideoRef} autoPlay playsInline muted className="w-full object-cover" style={{ maxHeight: '200px' }} />
+                         <canvas ref={webcamCanvasRef} className="hidden" />
+                         <div className="absolute inset-0 pointer-events-none border-2 border-dashed border-white/40 m-3 rounded-lg" />
+                       </div>
+                       <div className="flex gap-2 mt-2">
+                         <Button type="button" onClick={captureWebcamFrame} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2" disabled={isOcrProcessing}>
+                           <Camera className="h-4 w-4" /> Capturar
+                         </Button>
+                         <Button type="button" variant="outline" onClick={stopWebcamCapture} className="flex-1 gap-2">
+                           Cancelar
+                         </Button>
+                       </div>
+                     </>
+                   )}
+                 </div>
+               )}
             </div>
 
             <Separator />

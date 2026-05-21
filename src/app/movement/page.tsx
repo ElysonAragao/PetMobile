@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { QrCode, Send, Download, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2, AlertTriangle, ArrowRight, CalendarDays } from 'lucide-react';
+import { QrCode, Send, Download, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2, AlertTriangle, ArrowRight, CalendarDays, Star, ChevronsUpDown, Check } from 'lucide-react';
 import { 
     AlertDialog, 
     AlertDialogAction, 
@@ -23,6 +23,8 @@ import {
     DialogTitle, 
     DialogTrigger 
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -51,6 +53,7 @@ import { useSession } from '@/context/session-context';
 import { useMovement } from '@/hooks/use-movement';
 import { useProntuarios } from '@/hooks/use-prontuarios';
 import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
+import { useModelos } from '@/hooks/use-modelos';
 
 /**
  * Esquema de validação idêntico ao PacienteMobile, adaptado para terminologia Pet
@@ -77,6 +80,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     const { pets, isLoaded: petsLoaded } = usePets();
     const { users, isLoaded: usersLoaded } = useUsers();
     const { exams, isLoaded: examsLoaded } = useExams();
+    const { modelos, isLoaded: modelosLoaded } = useModelos();
     const { toast } = useToast();
     const { user: currentUser } = useSession();
     
@@ -100,6 +104,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
 
     // Suporte para médico/veterinário logado
     const isSpecificVet = currentUser?.status === 'MedicoVet';
+    const isGeralRole = currentUser?.status === 'Master' || currentUser?.status === 'Administrador' || currentUser?.status === 'MedicoVet Geral';
     
     const [generatedGuide, setGeneratedGuide] = useLocalStorage<GeneratedGuide | null>('movement-generated-guide', null);
     const [petSearch, setPetSearch] = React.useState('');
@@ -107,6 +112,8 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     const [examSearch, setExamSearch] = React.useState('');
     const [urgencyFilter, setUrgencyFilter] = React.useState(false);
     const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
+    const [isModeloOpen, setIsModeloOpen] = React.useState(false);
+    const [showOnlySelected, setShowOnlySelected] = React.useState(false);
 
     const petSearchInputRef = React.useRef<HTMLInputElement>(null);
     const vetSelectTriggerRef = React.useRef<HTMLButtonElement>(null);
@@ -153,7 +160,100 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     });
 
     const selectedPetId = form.watch('petId');
+    const selectedVeterinarioId = form.watch('veterinarioId');
     const currentPet = React.useMemo(() => pets.find(p => p.id === selectedPetId), [pets, selectedPetId]);
+
+    const examKits = React.useMemo(() => {
+        return modelos.filter(m => 
+            m.tipo === 'Exames' && 
+            (!m.medico_id || m.medico_id === selectedVeterinarioId)
+        );
+    }, [modelos, selectedVeterinarioId]);
+
+    const handleApplyKit = React.useCallback((kit: any) => {
+        if (!kit) return;
+        setIsModeloOpen(false);
+        
+        toast({ title: "Processando Kit...", description: `Buscando exames para o kit "${kit.nome}"...` });
+
+        setTimeout(() => {
+            const petPlan = currentPet?.healthPlanName?.trim().toLowerCase();
+            const lines = kit.conteudo
+                .split(/\r?\n/)
+                .map((l: string) => l.trim().replace(/^[\-\*\•]\s+/, '').trim())
+                .filter((l: string) => l.length > 0);
+            
+            if (lines.length === 0) {
+                toast({ title: "Kit Vazio", description: "O kit selecionado não possui conteúdo válido.", variant: "destructive" });
+                return;
+            }
+
+            const resolvedIds: string[] = [];
+            const notFound: string[] = [];
+
+            lines.forEach((line: string) => {
+                const lineLower = line.toLowerCase();
+                
+                const candidates = exams.filter(e => {
+                    const idExame = e.idExame?.toLowerCase().trim();
+                    const examCode = e.examCode?.toLowerCase().trim();
+                    const name = e.name?.toLowerCase().trim();
+                    return idExame === lineLower || examCode === lineLower || name === lineLower;
+                });
+
+                if (candidates.length > 0) {
+                    let match: any = null;
+                    
+                    // Tier 1: Exact plan match
+                    match = candidates.find(e => 
+                        e.healthPlanName?.trim().toLowerCase() === petPlan
+                    );
+                    
+                    // Tier 2: Partial plan match
+                    if (!match && petPlan) {
+                        match = candidates.find(e => {
+                            const ePlan = e.healthPlanName?.trim().toLowerCase();
+                            return ePlan && (ePlan.includes(petPlan) || petPlan.includes(ePlan));
+                        });
+                    }
+                    
+                    // Tier 3: Global exam
+                    if (!match) {
+                        match = candidates.find(e => !e.healthPlanName || e.healthPlanName.trim() === '');
+                    }
+                    
+                    if (match) {
+                        resolvedIds.push(match.id);
+                    }
+                } else {
+                    notFound.push(line);
+                }
+            });
+
+            if (resolvedIds.length > 0) {
+                const currentExams = form.getValues('examIds') || [];
+                const merged = Array.from(new Set([...currentExams, ...resolvedIds]));
+                
+                form.setValue('examIds', merged, { 
+                    shouldValidate: true, 
+                    shouldDirty: true,
+                    shouldTouch: true 
+                });
+                
+                toast({ 
+                    title: "Sucesso!", 
+                    description: `Adicionados ${resolvedIds.length} exames. ${notFound.length > 0 ? `${notFound.length} não encontrados.` : ""}`,
+                });
+                setShowOnlySelected(true);
+            } else {
+                toast({ 
+                    title: "Nenhum exame encontrado", 
+                    description: `Tentamos buscar ${lines.length} exames, mas nenhum é compatível com o plano "${currentPet?.healthPlanName || 'Não Informado'}".`, 
+                    variant: "destructive",
+                });
+            }
+        }, 300);
+    }, [exams, currentPet, form, toast]);
 
     const filteredExams = React.useMemo(() => {
         let baseExams = exams;
@@ -198,13 +298,6 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
         const isCompleted = searchParams.get('completed') === 'true';
         if (isCompleted && generatedGuide) {
             setShowSuccessDialog(true);
-        }
-
-        const shouldFocusNewGuide = searchParams.get('focus') === 'newGuide';
-        if (shouldFocusNewGuide && newGuideButtonRef.current) {
-            setTimeout(() => {
-                newGuideButtonRef.current?.focus();
-            }, 100);
         }
     }, [searchParams, generatedGuide]);
 
@@ -251,12 +344,33 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
         window.location.href = `/print/${generatedGuide.movimentoId}`;
     };
 
-    const resetForm = () => {
-        localStorage.removeItem('movement-generated-guide');
-        window.location.href = '/movement?mode=guia&reset=' + Date.now();
+    const resetForm = (isInitial = false) => {
+        if (!isInitial) {
+            localStorage.removeItem('movement-generated-guide');
+            window.location.href = '/movement?mode=guia&reset=' + Date.now();
+            return;
+        }
+        setPetSearch('');
+        setVetSearch('');
+        setExamSearch('');
+        setGeneratedGuide(null);
+        form.reset({
+            petId: '',
+            veterinarioId: isSpecificVet && currentUser ? currentUser.id : '',
+            examIds: [],
+        });
+        setTimeout(() => petSearchInputRef.current?.focus(), 100);
     };
 
-    const isLoading = !petsLoaded || !usersLoaded || !examsLoaded;
+    // Efeito para detectar reset forçado vindo do PDF ou clique em Nova Guia
+    React.useEffect(() => {
+        if (searchParams.get('reset') || searchParams.get('focus') === 'newGuide') {
+            resetForm(true); 
+            router.replace('/movement?mode=guia', { scroll: false });
+        }
+    }, [searchParams, router]);
+
+    const isLoading = !petsLoaded || !usersLoaded || !examsLoaded || !modelosLoaded;
 
     if (isLoading) {
         return (
@@ -356,13 +470,110 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                     name="examIds"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Exames Solicitados</FormLabel>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <FormLabel>Exames Solicitados</FormLabel>
+                                                <div className="flex gap-2">
+                                                    {(isGeralRole || isSpecificVet) && (
+                                                        <Popover open={isModeloOpen} onOpenChange={setIsModeloOpen}>
+                                                            <PopoverTrigger asChild>
+                                                                <Button type="button" variant="outline" size="sm" className="h-8 text-xs">
+                                                                    <Star className={cn("mr-2 h-3 w-3", examKits.length > 0 ? "fill-amber-400 text-amber-500" : "")} />
+                                                                    Kits Favoritos
+                                                                    <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-[300px] p-0 shadow-xl border-2" align="end">
+                                                                 <div className="flex flex-col bg-background">
+                                                                     <div className="p-3 border-b bg-muted/30">
+                                                                         <div className="relative">
+                                                                             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                                             <Input 
+                                                                                 placeholder="Buscar kit..." 
+                                                                                 className="h-8 pl-8 text-xs focus-visible:ring-1"
+                                                                             />
+                                                                         </div>
+                                                                     </div>
+                                                                     <ScrollArea className="h-[250px]">
+                                                                         <div className="p-1">
+                                                                             <p className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Seus Kits de Exames</p>
+                                                                             {examKits.length > 0 ? examKits.map((kit) => (
+                                                                                 <button
+                                                                                     key={kit.id}
+                                                                                     type="button"
+                                                                                     className="w-full flex items-center px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-md transition-colors text-left group"
+                                                                                     onClick={() => handleApplyKit(kit)}
+                                                                                 >
+                                                                                     <div className="mr-2 h-4 w-4 flex items-center justify-center">
+                                                                                         {kit.is_favorite ? (
+                                                                                             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                                                                                         ) : (
+                                                                                             <div className="h-1 w-1 bg-muted-foreground/30 rounded-full" />
+                                                                                         )}
+                                                                                     </div>
+                                                                                     <span className="flex-1 truncate font-medium">{kit.nome}</span>
+                                                                                     <Check className={cn("ml-2 h-4 w-4 opacity-0 text-primary", form.getValues('examIds')?.includes(kit.id) ? "opacity-100" : "group-hover:opacity-20")} />
+                                                                                 </button>
+                                                                             )) : (
+                                                                                 <div className="p-8 text-center">
+                                                                                     <p className="text-xs text-muted-foreground">Nenhum kit encontrado.</p>
+                                                                                 </div>
+                                                                             )}
+                                                                         </div>
+                                                                     </ScrollArea>
+                                                                     <div className="p-1 border-t bg-muted/10 space-y-0.5">
+                                                                         <button
+                                                                             type="button"
+                                                                             className="w-full flex items-center px-3 py-2 text-xs hover:bg-accent rounded-md transition-colors font-medium"
+                                                                             onClick={() => { setIsModeloOpen(false); router.push('/veterinarios'); }}
+                                                                         >
+                                                                             <PlusCircle className="mr-2 h-4 w-4 text-primary" />
+                                                                             Gerenciar Modelos
+                                                                         </button>
+                                                                         <button
+                                                                             type="button"
+                                                                             className="w-full flex items-center px-3 py-2 text-xs hover:bg-accent rounded-md transition-colors text-muted-foreground italic"
+                                                                             onClick={() => setIsModeloOpen(false)}
+                                                                         >
+                                                                             <Undo2 className="mr-2 h-4 w-4" />
+                                                                             Fechar Menu
+                                                                         </button>
+                                                                     </div>
+                                                                 </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    )}
+                                                </div>
+                                            </div>
                                             <div className="space-y-2">
                                                 <div className="flex flex-col sm:flex-row gap-2">
                                                     <div className="relative flex-1">
                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                                         <Input placeholder="Buscar exame..." value={examSearch} onChange={(e) => setExamSearch(e.target.value)} className="pl-10" />
                                                     </div>
+                                                    {(field.value?.length > 0) && (
+                                                        <div className="flex gap-1 shrink-0">
+                                                            <Button
+                                                                type="button"
+                                                                variant={!showOnlySelected ? "default" : "outline"}
+                                                                size="sm"
+                                                                className="h-9 text-xs gap-1.5"
+                                                                onClick={() => setShowOnlySelected(false)}
+                                                            >
+                                                                <Search className="h-3.5 w-3.5" />
+                                                                Ver Todos
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant={showOnlySelected ? "default" : "outline"}
+                                                                size="sm"
+                                                                className="h-9 text-xs gap-1.5"
+                                                                onClick={() => setShowOnlySelected(true)}
+                                                            >
+                                                                <Check className="h-3.5 w-3.5" />
+                                                                Selecionados ({field.value.length})
+                                                            </Button>
+                                                        </div>
+                                                    )}
                                                     <Button type="button" variant={urgencyFilter ? "destructive" : "outline"} size="sm" onClick={() => setUrgencyFilter(!urgencyFilter)} className="flex items-center gap-2">
                                                         <AlertTriangle className={urgencyFilter ? "animate-pulse" : "h-4 w-4"} size={16} />
                                                         {urgencyFilter ? "Apenas Urgentes" : "Filtrar Urgentes"}
@@ -370,16 +581,32 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                                 </div>
                                                 <ScrollArea className="h-48 w-full rounded-md border p-4">
                                                     <div className="space-y-3">
-                                                        {filteredExams.map((item) => (
-                                                            <div key={item.id} className="flex items-start space-x-3">
-                                                                <Checkbox id={item.id} checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value.filter(v => v !== item.id))} />
-                                                                <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2">
-                                                                    <span className="font-mono text-primary font-bold">{item.idExame || item.examCode}</span> — {item.name}
-                                                                    {item.isUrgency && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px] h-5 px-1 py-0">URGENTE</Badge>}
-                                                                </label>
-                                                            </div>
-                                                        ))}
-                                                        {filteredExams.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">Nenhum exame encontrado.</p>}
+                                                        {(() => {
+                                                            const selectedIds = field.value || [];
+                                                            let displayExams;
+                                                            if (showOnlySelected) {
+                                                                displayExams = exams.filter(e => selectedIds.includes(e.id));
+                                                            } else {
+                                                                displayExams = filteredExams;
+                                                            }
+                                                            return displayExams.length > 0 ? displayExams.map((item) => (
+                                                                <div key={item.id} className="flex items-start space-x-3">
+                                                                    <Checkbox id={item.id} checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value.filter(v => v !== item.id))} />
+                                                                    <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2">
+                                                                        <span className="font-mono text-primary font-bold">{item.idExame || item.examCode}</span> — {item.name}
+                                                                        {item.isUrgency && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px] h-5 px-1 py-0">URGENTE</Badge>}
+                                                                    </label>
+                                                                </div>
+                                                            )) : (
+                                                                <div className="text-center py-8">
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        {showOnlySelected 
+                                                                            ? 'Nenhum exame selecionado. Clique em "Selecionados" para ver todos.'
+                                                                            : examSearch ? `Nenhum exame encontrado para "${examSearch}".` : 'Nenhum exame disponível.'}
+                                                                    </p>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </ScrollArea>
                                             </div>
@@ -394,7 +621,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                     </Button>
                                 )}
                                 {generatedGuide && (
-                                    <Button ref={newGuideButtonRef} type="button" variant="outline" className="w-full" onClick={resetForm}><RefreshCw className="mr-2 h-4 w-4" /> Gerar Nova Guia</Button>
+                                    <Button type="button" variant="outline" className="w-full" onClick={() => resetForm()}><RefreshCw className="mr-2 h-4 w-4" /> Gerar Nova Guia</Button>
                                 )}
                              </form>
                         </Form>
@@ -449,7 +676,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4 sm:justify-center w-full">
                         <AlertDialogCancel onClick={() => setShowSuccessDialog(false)}>Manter nesta tela</AlertDialogCancel>
-                        <AlertDialogAction onClick={resetForm}>Nova Leitura</AlertDialogAction>
+                        <AlertDialogAction onClick={() => resetForm()}>Nova Leitura</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -464,7 +691,7 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
     const { user } = useSession();
     const router = useRouter();
     const [petSearch, setPetSearch] = React.useState('');
-    const [selectedPetId, setSelectedPetId] = React.useState('');
+    const [selectedPetId, setSelectedPetId] = React.useState('all');
     const [isGlobalListOpen, setIsGlobalListOpen] = React.useState(false);
     const [vetFilter, setVetFilter] = React.useState<string>('all');
 
@@ -497,7 +724,7 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
             filtered = prontuarios.filter(p => p.medico_id === user.id || p.autor_registro_id === user.id);
         }
 
-        if (selectedPetId) {
+        if (selectedPetId && selectedPetId !== 'all') {
             filtered = filtered.filter(p => p.pet_id === selectedPetId);
         }
 
@@ -569,6 +796,12 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
                                     <SelectValue placeholder="Selecione o animal na lista..." />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="all" className="py-3 border-b bg-blue-50/50">
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold text-base text-blue-700">Todos os Animais (Geral)</span>
+                                            <span className="text-sm text-blue-600/70">Lista o histórico de todos os pets</span>
+                                        </div>
+                                    </SelectItem>
                                     {filteredPets.length > 0 ? filteredPets.map(p => (
                                         <SelectItem key={p.id} value={p.id} className="py-3">
                                             <div className="flex flex-col">
@@ -592,7 +825,7 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
                         </Button>
                         <Button 
                             size="lg" 
-                            disabled={!selectedPetId}
+                            disabled={!selectedPetId || selectedPetId === 'all'}
                             onClick={() => router.push(`/pets/${selectedPetId}/prontuario`)}
                             className="bg-blue-600 hover:bg-blue-700"
                         >
@@ -619,7 +852,11 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
                             <Button variant="outline" size="sm" onClick={() => handleExport('txt')} className="h-8">
                                 <Download className="w-4 h-4 mr-2" /> TXT
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setIsGlobalListOpen(false)} className="h-8">
+                            <Button variant="ghost" size="sm" onClick={() => {
+                                setIsGlobalListOpen(false);
+                                setSelectedPetId('all');
+                                setPetSearch('');
+                            }} className="h-8">
                                 <Undo2 className="w-4 h-4 mr-2" /> Voltar
                             </Button>
                         </div>

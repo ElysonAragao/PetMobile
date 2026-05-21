@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
 
         // ─── CRIAR USUÁRIO (Auth + Perfil) ───
         if (action === 'create_user') {
-            const { nome, email, status, validade, cpf, crmv_uf, crm_uf, telefone, empresaId } = body;
+            const { nome, email, status, validade, cpf, crmv_uf, crm_uf, telefone, empresaId, especialidade, prontuario_liberado, validade_prontuario } = body;
             const finalCrmv = crmv_uf || crm_uf; // Para manter compatibilidade
 
             // Administradores e Auxiliares impõem a própria empresa. Master recebe do body (empresaId selecionada).
@@ -218,6 +218,9 @@ export async function POST(req: NextRequest) {
                     cpf: cpf || null,
                     crmv_uf: finalCrmv || null,
                     telefone: telefone || null,
+                    especialidade: especialidade || null,
+                    prontuario_liberado: prontuario_liberado || false,
+                    validade_prontuario: validade_prontuario || null,
                 });
 
             if (profileError) {

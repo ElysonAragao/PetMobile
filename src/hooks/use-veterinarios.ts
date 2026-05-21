@@ -11,8 +11,12 @@ const veterinarioSchema = z.object({
     codVet: z.string().optional(),
     nome: z.string().min(1, "Nome é obrigatório"),
     crmv: z.string().min(1, "CRMV é obrigatório"),
+    especialidade: z.string().optional().default('Geral'),
     email: z.string().email("E-mail inválido").or(z.literal('')).optional().default(''),
     telefone: z.string().optional().default(''),
+    prontuario_liberado: z.boolean().optional().default(false),
+    validade_prontuario: z.string().or(z.literal('')).nullable().optional().default(''),
+    validade_acesso: z.string().or(z.literal('')).nullable().optional().default(''),
 });
 
 export type VeterinarioFormValues = z.infer<typeof veterinarioSchema>;
@@ -65,7 +69,7 @@ export function useVeterinarios() {
             console.log("Buscando médicos veterinários para clínica:", selectedEmpresaId);
             let query = supabase
                 .from('pet_usuarios')
-                .select('id, empresa_id, nome, crmv_uf, email, telefone, codVet:codigo, created_at')
+                .select('id, empresa_id, nome, crmv_uf, especialidade, email, telefone, codVet:codigo, created_at, validade_acesso:validade, prontuario_liberado, validade_prontuario')
                 .in('status', ['MedicoVet', 'MedicoVet Geral'])
                 .not('nome', 'is', null)
                 .neq('nome', '')
@@ -86,8 +90,12 @@ export function useVeterinarios() {
                 codVet: row.codVet,
                 nome: row.nome,
                 crmv: row.crmv_uf,
+                especialidade: row.especialidade,
                 email: row.email,
-                telefone: row.telefone
+                telefone: row.telefone,
+                validade_acesso: row.validade_acesso,
+                prontuario_liberado: row.prontuario_liberado,
+                validade_prontuario: row.validade_prontuario
             }));
 
             console.log(`Veterinários carregados: ${mappedData.length}`);
@@ -150,8 +158,12 @@ export function useVeterinarios() {
                     email: vetEmail,
                     status: 'MedicoVet',
                     crmv_uf: vetData.crmv,
+                    especialidade: vetData.especialidade || null,
                     telefone: vetData.telefone || null,
                     empresaId: selectedEmpresaId,
+                    validade: vetData.validade_acesso || null,
+                    prontuario_liberado: vetData.prontuario_liberado || false,
+                    validade_prontuario: vetData.validade_prontuario || null,
                 }),
             });
 
@@ -180,18 +192,63 @@ export function useVeterinarios() {
 
     const updateVeterinario = useCallback(async (vetId: string, vetData: Partial<VeterinarioFormValues>): Promise<{ success: boolean, message?: string }> => {
         try {
-            const dataToUpdate: any = {};
-            if (vetData.nome !== undefined) dataToUpdate.nome = vetData.nome;
-            if (vetData.crmv !== undefined) dataToUpdate.crmv_uf = vetData.crmv;
-            if (vetData.telefone !== undefined) dataToUpdate.telefone = vetData.telefone;
-            if (vetData.email !== undefined) dataToUpdate.email = vetData.email;
+            const dataToUpdate: any = {
+                nome: vetData.nome,
+                crmv_uf: vetData.crmv,
+                especialidade: vetData.especialidade,
+                telefone: vetData.telefone,
+                prontuario_liberado: vetData.prontuario_liberado !== undefined ? vetData.prontuario_liberado : undefined,
+                validade_prontuario: vetData.validade_prontuario !== undefined ? (vetData.validade_prontuario || null) : undefined,
+            };
+            if (vetData.email) dataToUpdate.email = vetData.email;
 
-            const { error: updateError } = await supabase
+            if (dataToUpdate.nome === undefined) delete dataToUpdate.nome;
+            if (dataToUpdate.crmv_uf === undefined) delete dataToUpdate.crmv_uf;
+            if (dataToUpdate.telefone === undefined) delete dataToUpdate.telefone;
+            if (dataToUpdate.prontuario_liberado === undefined) delete dataToUpdate.prontuario_liberado;
+            if (dataToUpdate.validade_prontuario === undefined) delete dataToUpdate.validade_prontuario;
+
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData.session?.access_token;
+
+            if (!token) {
+                return { success: false, message: 'Sessão expirada. Faça login novamente.' };
+            }
+
+            const { data: currentUserData } = await supabase
                 .from('pet_usuarios')
-                .update(dataToUpdate)
-                .eq('id', vetId);
+                .select('status, validade')
+                .eq('id', vetId)
+                .single();
 
-            if (updateError) throw updateError;
+            const response = await fetch('/api/admin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    action: 'update_user',
+                    userId: vetId,
+                    userData: {
+                        nome: dataToUpdate.nome,
+                        status: currentUserData?.status || 'MedicoVet',
+                        validade: vetData.validade_acesso !== undefined ? (vetData.validade_acesso || null) : (currentUserData?.validade || null),
+                        crmv_uf: dataToUpdate.crmv_uf,
+                        especialidade: dataToUpdate.especialidade,
+                        telefone: dataToUpdate.telefone,
+                        email: dataToUpdate.email,
+                        prontuario_liberado: dataToUpdate.prontuario_liberado,
+                        validade_prontuario: dataToUpdate.validade_prontuario
+                    }
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Falha ao atualizar médico veterinário.');
+            }
 
             fetchVeterinarios();
             return { success: true };

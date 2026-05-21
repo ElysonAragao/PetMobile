@@ -40,6 +40,10 @@ export interface Veterinario {
   crmv: string; // CRM Veterinário
   email: string;
   telefone: string;
+  especialidade?: string;
+  validade_acesso?: string | null;
+  prontuario_liberado?: boolean;
+  validade_prontuario?: string | null;
 }
 
 export interface HealthPlan {
@@ -79,6 +83,18 @@ export interface Usuario {
   status: 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
   dataCadastro: string; // ISO string
   dataValidade: string; // YYYY-MM-DD
+  validade?: string; // from api
+}
+
+export interface Modelo {
+  id: string;
+  empresa_id: string;
+  medico_id?: string | null; // Null means global for the company
+  nome: string;
+  tipo: 'Exames' | 'Receita' | 'Atestado' | 'Laudo' | 'Encaminhamento' | 'Outros';
+  conteudo: string; // The text content or JSON with exam list
+  is_favorite?: boolean;
+  created_at?: string;
 }
 
 export interface Leitura {
