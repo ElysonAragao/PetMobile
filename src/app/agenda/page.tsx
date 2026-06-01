@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import { useAgenda } from '@/hooks/use-agenda';
 import { useVeterinarios } from '@/hooks/use-veterinarios';
@@ -76,6 +78,7 @@ export default function AgendaPage() {
   const [activeTab, setActiveTab] = useState('diaria');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedMedicoId, setSelectedMedicoId] = useState('all');
+  const [selectedTipo, setSelectedTipo] = useState('all');
   
   // Navigation helpers for agenda diária
   const handlePreviousDay = () => {
@@ -100,6 +103,7 @@ export default function AgendaPage() {
   const [formMedicoId, setFormMedicoId] = useState('');
   const [formDate, setFormDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [formTime, setFormTime] = useState('09:00');
+  const [formTipo, setFormTipo] = useState<'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia'>('Consulta');
   const [formTutorCpf, setFormTutorCpf] = useState('');
   const [formTutorNome, setFormTutorNome] = useState('');
   const [formPetNome, setFormPetNome] = useState('');
@@ -116,12 +120,14 @@ export default function AgendaPage() {
   const [editPetNome, setEditPetNome] = useState('');
   const [editTutorTelefone, setEditTutorTelefone] = useState('');
   const [editStatus, setEditStatus] = useState<'Agendado' | 'Cancelado' | 'Realizado'>('Agendado');
+  const [editTipo, setEditTipo] = useState<'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia'>('Consulta');
 
   // Report Filters
   const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportMedicoId, setReportMedicoId] = useState('all');
   const [reportStatus, setReportStatus] = useState('all');
+  const [reportTipo, setReportTipo] = useState('all');
 
   // Trigger search on mount and when filters change
   useEffect(() => {
@@ -131,9 +137,10 @@ export default function AgendaPage() {
     fetchAgenda({ 
       startDate: start, 
       endDate: end, 
-      medicoId: selectedMedicoId 
+      medicoId: selectedMedicoId,
+      tipo: selectedTipo
     });
-  }, [selectedDate, selectedMedicoId, fetchAgenda]);
+  }, [selectedDate, selectedMedicoId, selectedTipo, fetchAgenda]);
 
   // Load report data
   const handleLoadReport = () => {
@@ -142,7 +149,8 @@ export default function AgendaPage() {
     fetchAgenda({ 
       startDate: start, 
       endDate: end, 
-      medicoId: reportMedicoId 
+      medicoId: reportMedicoId,
+      tipo: reportTipo
     });
     toast({
       title: "Relatório Atualizado",
@@ -249,7 +257,8 @@ export default function AgendaPage() {
       tutorCpf: formTutorCpf,
       tutorNome: formTutorNome,
       petNome: formPetNome,
-      tutorTelefone: formTutorTelefone
+      tutorTelefone: formTutorTelefone,
+      tipo: formTipo
     });
 
     if (result.success) {
@@ -260,11 +269,12 @@ export default function AgendaPage() {
       // Reset form
       setFormMedicoId('');
       setFormTime('09:00');
+      setFormTipo('Consulta');
       handleClearLookup();
       // Refresh list
       const start = `${selectedDate}T00:00:00.000Z`;
       const end = `${selectedDate}T23:59:59.999Z`;
-      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId });
+      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
       setActiveTab('diaria');
     } else {
       toast({
@@ -361,6 +371,7 @@ export default function AgendaPage() {
     setEditPetNome(item.petNome || '');
     setEditTutorTelefone(item.tutorTelefone || '');
     setEditStatus(item.status);
+    setEditTipo(item.tipo || 'Consulta');
     setIsEditDialogOpen(true);
   };
 
@@ -396,7 +407,8 @@ export default function AgendaPage() {
       tutorNome: editTutorNome,
       petNome: editPetNome,
       tutorTelefone: editTutorTelefone,
-      status: editStatus
+      status: editStatus,
+      tipo: editTipo
     });
 
     if (result.success) {
@@ -410,7 +422,7 @@ export default function AgendaPage() {
       // Refresh list
       const start = `${selectedDate}T00:00:00.000Z`;
       const end = `${selectedDate}T23:59:59.999Z`;
-      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId });
+      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
     } else {
       toast({
         title: "Falha ao atualizar",
@@ -431,7 +443,7 @@ export default function AgendaPage() {
       return;
     }
 
-    const headers = ['Data Agendamento', 'Hora', 'Veterinario', 'CRMV', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status'];
+    const headers = ['Data Agendamento', 'Hora', 'Tipo', 'Veterinario', 'CRMV', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status'];
     const rows = agenda.map(item => {
       const dateObj = parseISO(item.dataAgendamento);
       const dataFormatada = format(dateObj, 'dd/MM/yyyy');
@@ -439,6 +451,7 @@ export default function AgendaPage() {
       return [
         dataFormatada,
         horaFormatada,
+        item.tipo || 'Consulta',
         item.medico?.nome || 'Não Vinculado',
         item.medico?.crmv_uf || '',
         item.petNome,
@@ -466,7 +479,106 @@ export default function AgendaPage() {
     window.print();
   };
 
-  // Filtered agenda for report view (client-side filter for status if needed, dates/doctor are filtered at backend API query level)
+  // Print daily agenda PDF
+  const handlePrintDailyAgendaPDF = () => {
+    if (agenda.length === 0) {
+      toast({
+        title: "Sem agendamentos",
+        description: "Não há consultas agendadas para o dia selecionado.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      
+      const parts = selectedDate.split('-');
+      const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : selectedDate;
+
+      const medicoObj = veterinarios.find(v => v.id === selectedMedicoId);
+      const medicoLabel = medicoObj ? medicoObj.nome : 'todos';
+      const tipoLabel = selectedTipo === 'all' ? 'todos' : selectedTipo;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text(`Agenda do Dia - ${formattedDate}`, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.text(`- Medico:  Selecionado ${medicoLabel}   |   Tipo: ${tipoLabel}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
+
+      const headers = [['Hora', 'Tipo', 'Nome do Pet', 'CPF Tutor', 'Nome Tutor', 'Médico', 'Situação', 'Ações']];
+
+      const rows = agenda.map(item => {
+        const horaStr = format(parseISO(item.dataAgendamento), 'HH:mm');
+        const isNewPet = !item.petId;
+        const petCell = `${item.petNome}\n${isNewPet ? 'Novo Paciente' : `Cadastrado (${item.pet?.codPet || ''})`}`;
+        const tutorCell = `${item.tutorNome}${item.tutorTelefone ? `\n${item.tutorTelefone}` : ''}`;
+        const medicoCell = `${item.medico?.nome || 'Não Vinculado'}${item.medico?.crmv_uf ? `\nCRMV: ${item.medico.crmv_uf}` : ''}`;
+        
+        return [
+          horaStr,
+          item.tipo || 'Consulta',
+          petCell,
+          item.tutorCpf || '',
+          tutorCell,
+          medicoCell,
+          item.status || '',
+          ''
+        ];
+      });
+
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 35,
+        styles: { 
+          fontSize: 9,
+          cellPadding: 3,
+          valign: 'middle',
+          font: 'helvetica'
+        },
+        headStyles: { 
+          fillColor: [37, 99, 235],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        },
+        columnStyles: {
+          0: { cellWidth: 15 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 30 },
+          5: { cellWidth: 30 },
+          6: { cellWidth: 20 },
+          7: { cellWidth: 10 }
+        }
+      });
+
+      // Generate blob URL to preview/print in a new tab
+      const pdfBlob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      window.open(blobUrl, '_blank');
+      
+      toast({
+        title: "Visualização do PDF aberta",
+        description: "O PDF da agenda foi aberto em uma nova guia para visualização e impressão."
+      });
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Não foi possível gerar o arquivo PDF.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Filtered agenda for report view (client-side filter for status if needed, dates/doctor/tipo are filtered at backend API query level)
   const filteredReportAgenda = useMemo(() => {
     if (reportStatus === 'all') return agenda;
     return agenda.filter(item => item.status === reportStatus);
@@ -591,6 +703,29 @@ export default function AgendaPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Tipo:</span>
+                    <Select value={selectedTipo} onValueChange={setSelectedTipo}>
+                      <SelectTrigger className="w-[140px] h-9 shadow-sm">
+                        <SelectValue placeholder="Todos os Tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Tipos</SelectItem>
+                        <SelectItem value="Consulta">Consulta</SelectItem>
+                        <SelectItem value="Retorno">Retorno</SelectItem>
+                        <SelectItem value="Exame">Exame</SelectItem>
+                        <SelectItem value="Cirurgia">Cirurgia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="h-9 shadow-sm gap-2 border-primary/20 hover:bg-primary/5 text-primary"
+                    onClick={handlePrintDailyAgendaPDF}
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir PDF da Agenda do Dia
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -605,6 +740,7 @@ export default function AgendaPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="font-bold w-[100px]">Hora</TableHead>
+                        <TableHead className="font-bold">Tipo</TableHead>
                         <TableHead className="font-bold">Nome do Pet</TableHead>
                         <TableHead className="font-bold">CPF Tutor</TableHead>
                         <TableHead className="font-bold">Nome Tutor</TableHead>
@@ -631,6 +767,24 @@ export default function AgendaPage() {
                                 <Clock className="w-4 h-4 text-blue-500 shrink-0" />
                                 {horaStr}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[11px] px-2 py-0.5 font-medium ${
+                                  item.tipo === 'Consulta' 
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                    : item.tipo === 'Retorno' 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                    : item.tipo === 'Exame' 
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                    : item.tipo === 'Cirurgia' 
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {item.tipo || 'Consulta'}
+                              </Badge>
                             </TableCell>
                             <TableCell className="font-bold text-foreground">
                               <div className="flex flex-col gap-1">
@@ -717,7 +871,8 @@ export default function AgendaPage() {
                                             fetchAgenda({ 
                                               startDate: `${selectedDate}T00:00:00.000Z`, 
                                               endDate: `${selectedDate}T23:59:59.999Z`, 
-                                              medicoId: selectedMedicoId 
+                                              medicoId: selectedMedicoId,
+                                              tipo: selectedTipo
                                             });
                                           }
                                         }
@@ -784,7 +939,8 @@ export default function AgendaPage() {
                                             fetchAgenda({ 
                                               startDate: `${selectedDate}T00:00:00.000Z`, 
                                               endDate: `${selectedDate}T23:59:59.999Z`, 
-                                              medicoId: selectedMedicoId 
+                                              medicoId: selectedMedicoId,
+                                              tipo: selectedTipo
                                             });
                                           }
                                         }
@@ -916,8 +1072,8 @@ export default function AgendaPage() {
               <form onSubmit={handleScheduleSubmit}>
                 <CardContent className="space-y-4">
                   
-                  {/* Seletor de Médico */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Seletor de Médico, Tipo, Data e Hora */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <span className="text-sm font-medium">Médico Veterinário:*</span>
                       <Select value={formMedicoId} onValueChange={setFormMedicoId}>
@@ -928,6 +1084,21 @@ export default function AgendaPage() {
                           {veterinarios.map(v => (
                             <SelectItem key={v.id} value={v.id}>{v.nome} ({v.crmv || 'Sem CRMV'})</SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Tipo:*</span>
+                      <Select value={formTipo} onValueChange={(val: any) => setFormTipo(val)}>
+                        <SelectTrigger className="shadow-sm">
+                          <SelectValue placeholder="Tipo de Agendamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Consulta">Consulta</SelectItem>
+                          <SelectItem value="Retorno">Retorno</SelectItem>
+                          <SelectItem value="Exame">Exame</SelectItem>
+                          <SelectItem value="Cirurgia">Cirurgia</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1041,7 +1212,7 @@ export default function AgendaPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                 <div className="space-y-2">
                   <span className="text-sm font-medium">Data Inicial:</span>
                   <Input 
@@ -1071,6 +1242,21 @@ export default function AgendaPage() {
                       {veterinarios.map(v => (
                         <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Tipo:</span>
+                  <Select value={reportTipo} onValueChange={setReportTipo}>
+                    <SelectTrigger className="shadow-sm">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Tipos</SelectItem>
+                      <SelectItem value="Consulta">Consulta</SelectItem>
+                      <SelectItem value="Retorno">Retorno</SelectItem>
+                      <SelectItem value="Exame">Exame</SelectItem>
+                      <SelectItem value="Cirurgia">Cirurgia</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1148,6 +1334,7 @@ export default function AgendaPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data/Hora</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Médico</TableHead>
                       <TableHead>Pet</TableHead>
                       <TableHead>Tutor</TableHead>
@@ -1164,6 +1351,24 @@ export default function AgendaPage() {
                       return (
                         <TableRow key={item.id}>
                           <TableCell className="font-semibold">{dataStr}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-[11px] px-1.5 py-0.5 font-medium ${
+                                item.tipo === 'Consulta' 
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                  : item.tipo === 'Retorno' 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                  : item.tipo === 'Exame' 
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                  : item.tipo === 'Cirurgia' 
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {item.tipo || 'Consulta'}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{item.medico?.nome || 'Não Vinculado'}</TableCell>
                           <TableCell className="font-bold">{item.petNome}</TableCell>
                           <TableCell>{item.tutorNome}</TableCell>
@@ -1205,6 +1410,7 @@ export default function AgendaPage() {
           <thead>
             <tr className="bg-slate-100">
               <th className="border border-slate-300 p-2 text-left">Data/Hora</th>
+              <th className="border border-slate-300 p-2 text-left">Tipo</th>
               <th className="border border-slate-300 p-2 text-left">Veterinário</th>
               <th className="border border-slate-300 p-2 text-left">Pet</th>
               <th className="border border-slate-300 p-2 text-left">Tutor</th>
@@ -1220,6 +1426,7 @@ export default function AgendaPage() {
               return (
                 <tr key={item.id}>
                   <td className="border border-slate-300 p-2">{dataStr}</td>
+                  <td className="border border-slate-300 p-2">{item.tipo || 'Consulta'}</td>
                   <td className="border border-slate-300 p-2">{item.medico?.nome || '-'}</td>
                   <td className="border border-slate-300 p-2 font-bold">{item.petNome}</td>
                   <td className="border border-slate-300 p-2">{item.tutorNome}</td>
@@ -1255,8 +1462,8 @@ export default function AgendaPage() {
           </DialogHeader>
 
           <form onSubmit={handleEditSubmit} className="space-y-4 py-2">
-            {/* Seletor de Médico */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Seletor de Médico, Tipo, Data e Hora */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <span className="text-sm font-medium text-muted-foreground">Médico Veterinário:*</span>
                 <Select value={editMedicoId} onValueChange={setEditMedicoId}>
@@ -1267,6 +1474,21 @@ export default function AgendaPage() {
                     {veterinarios.map(v => (
                       <SelectItem key={v.id} value={v.id}>{v.nome} ({v.crmv || 'Sem CRMV'})</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-muted-foreground">Tipo:*</span>
+                <Select value={editTipo} onValueChange={(val: any) => setEditTipo(val)}>
+                  <SelectTrigger className="shadow-sm">
+                    <SelectValue placeholder="Tipo de Agendamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Consulta">Consulta</SelectItem>
+                    <SelectItem value="Retorno">Retorno</SelectItem>
+                    <SelectItem value="Exame">Exame</SelectItem>
+                    <SelectItem value="Cirurgia">Cirurgia</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

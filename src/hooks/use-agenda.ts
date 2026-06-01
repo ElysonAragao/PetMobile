@@ -13,7 +13,7 @@ export function useAgenda() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchAgenda = useCallback(async (filters?: { startDate?: string; endDate?: string; medicoId?: string }) => {
+  const fetchAgenda = useCallback(async (filters?: { startDate?: string; endDate?: string; medicoId?: string; tipo?: string }) => {
     if (!selectedEmpresaId) return;
     setIsLoading(true);
     setError(null);
@@ -32,6 +32,7 @@ export function useAgenda() {
           pet_nome,
           tutor_telefone,
           status,
+          tipo,
           created_at,
           medico:pet_usuarios(nome, crmv_uf),
           pet:pet_pets(nome, cod_pet)
@@ -40,6 +41,10 @@ export function useAgenda() {
 
       if (filters?.medicoId && filters.medicoId !== 'all') {
         query = query.eq('medico_id', filters.medicoId);
+      }
+
+      if (filters?.tipo && filters.tipo !== 'all') {
+        query = query.eq('tipo', filters.tipo);
       }
 
       if (filters?.startDate) {
@@ -68,6 +73,7 @@ export function useAgenda() {
         petNome: row.pet_nome,
         tutorTelefone: row.tutor_telefone,
         status: row.status,
+        tipo: row.tipo || 'Consulta',
         createdAt: row.created_at,
         medico: row.medico ? { nome: row.medico.nome, crmv_uf: row.medico.crmv_uf } : undefined,
         pet: row.pet ? { nome: row.pet.nome, codPet: row.pet.cod_pet } : undefined
@@ -90,6 +96,7 @@ export function useAgenda() {
     tutorNome: string;
     petNome: string;
     tutorTelefone: string;
+    tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
   }): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!selectedEmpresaId) {
@@ -105,7 +112,8 @@ export function useAgenda() {
         tutor_nome: agendaData.tutorNome.trim(),
         pet_nome: agendaData.petNome.trim(),
         tutor_telefone: agendaData.tutorTelefone?.trim() || null,
-        status: 'Agendado'
+        status: 'Agendado',
+        tipo: agendaData.tipo || 'Consulta'
       };
 
       const { error: insertError } = await supabase
@@ -130,6 +138,7 @@ export function useAgenda() {
     petNome: string;
     tutorTelefone: string;
     status?: 'Agendado' | 'Cancelado' | 'Realizado';
+    tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
   }): Promise<{ success: boolean; message?: string }> => {
     try {
       const payload: any = {
@@ -144,6 +153,10 @@ export function useAgenda() {
 
       if (agendaData.status) {
         payload.status = agendaData.status;
+      }
+
+      if (agendaData.tipo) {
+        payload.tipo = agendaData.tipo;
       }
 
       const { error: updateError } = await supabase

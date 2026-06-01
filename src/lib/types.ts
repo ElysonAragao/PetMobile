@@ -159,6 +159,7 @@ export interface AgendaItem {
   petNome: string;
   tutorTelefone: string | null;
   status: 'Agendado' | 'Cancelado' | 'Realizado';
+  tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
   createdAt: string;
   // Join objects
   medico?: { nome: string; crmv_uf?: string };
