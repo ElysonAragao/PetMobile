@@ -23,7 +23,8 @@ import {
   Filter,
   FileSpreadsheet,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Edit
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -41,10 +42,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AgendaItem } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '@/components/ui/dialog';
 
 export default function AgendaPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const supabase = React.useMemo(() => createClient(), []);
   
   // Custom hooks
   const { 
@@ -53,6 +64,7 @@ export default function AgendaPage() {
     error: agendaError,
     fetchAgenda, 
     addAgenda, 
+    updateAgenda,
     updateAgendaStatus, 
     deleteAgenda,
     searchPetByCpfOrCode
@@ -92,6 +104,18 @@ export default function AgendaPage() {
   const [formTutorNome, setFormTutorNome] = useState('');
   const [formPetNome, setFormPetNome] = useState('');
   const [formTutorTelefone, setFormTutorTelefone] = useState('');
+
+  // State for Editing Appointment Dialog
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<AgendaItem | null>(null);
+  const [editMedicoId, setEditMedicoId] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editTutorCpf, setEditTutorCpf] = useState('');
+  const [editTutorNome, setEditTutorNome] = useState('');
+  const [editPetNome, setEditPetNome] = useState('');
+  const [editTutorTelefone, setEditTutorTelefone] = useState('');
+  const [editStatus, setEditStatus] = useState<'Agendado' | 'Cancelado' | 'Realizado'>('Agendado');
 
   // Report Filters
   const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -254,7 +278,43 @@ export default function AgendaPage() {
   // Handle appointment click / arrival (Check-in flow)
   const handleCheckIn = async (item: AgendaItem) => {
     try {
-      // 1. Atualizar o status para "Realizado"
+      // 1. Verificar se o Pet já é cadastrado no banco (caso item.petId seja nulo)
+      let finalPetId = item.petId;
+      
+      if (!finalPetId) {
+        toast({
+          title: "Buscando prontuário",
+          description: "Verificando se o pet já possui cadastro..."
+        });
+        
+        // Buscar por CPF do tutor e nome aproximado do Pet
+        const { data: foundPets, error: searchError } = await supabase
+          .from('pet_pets')
+          .select('id')
+          .eq('empresa_id', item.empresaId)
+          .eq('tutor_cpf', item.tutorCpf)
+          .ilike('nome', item.petNome.trim())
+          .limit(1);
+
+        if (searchError) {
+          console.error("Erro ao buscar pet:", searchError);
+        } else if (foundPets && foundPets.length > 0) {
+          finalPetId = foundPets[0].id;
+          
+          // Atualiza a própria consulta na agenda para vincular o ID encontrado
+          await supabase
+            .from('pet_agenda')
+            .update({ pet_id: finalPetId })
+            .eq('id', item.id);
+            
+          toast({
+            title: "Cadastro identificado!",
+            description: `O pet ${item.petNome} já estava cadastrado.`
+          });
+        }
+      }
+
+      // 2. Atualizar o status para "Realizado"
       const res = await updateAgendaStatus(item.id, 'Realizado');
       if (!res.success) {
         toast({
@@ -270,10 +330,10 @@ export default function AgendaPage() {
         description: "Direcionando para a ficha cadastral do Pet..."
       });
 
-      // 2. Redirecionar dependendo de o pet já estar cadastrado ou não
-      if (item.petId) {
+      // 3. Redirecionar dependendo de o pet já estar cadastrado ou não
+      if (finalPetId) {
         // Se já está cadastrado, abre no modo edição
-        router.push(`/pets?editPetId=${item.petId}`);
+        router.push(`/pets?editPetId=${finalPetId}`);
       } else {
         // Se é novo, redireciona preenchendo os dados coletados na agenda
         router.push(
@@ -285,6 +345,76 @@ export default function AgendaPage() {
       toast({
         title: "Erro operacional",
         description: "Falha ao processar fluxo de chegada.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleStartEdit = (item: AgendaItem) => {
+    setEditingItem(item);
+    const dateObj = parseISO(item.dataAgendamento);
+    setEditMedicoId(item.medicoId || '');
+    setEditDate(format(dateObj, 'yyyy-MM-dd'));
+    setEditTime(format(dateObj, 'HH:mm'));
+    setEditTutorCpf(item.tutorCpf || '');
+    setEditTutorNome(item.tutorNome || '');
+    setEditPetNome(item.petNome || '');
+    setEditTutorTelefone(item.tutorTelefone || '');
+    setEditStatus(item.status);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    if (!editMedicoId) {
+      toast({
+        title: "Médico obrigatório",
+        description: "Selecione o médico veterinário para o agendamento.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!editTutorNome.trim() || !editPetNome.trim() || !editTutorCpf.trim()) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha o CPF do tutor, nome do tutor e nome do pet.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const dateTimeIso = new Date(`${editDate}T${editTime}:00`).toISOString();
+
+    const result = await updateAgenda(editingItem.id, {
+      medicoId: editMedicoId,
+      dataAgendamento: dateTimeIso,
+      petId: editingItem.petId,
+      tutorCpf: editTutorCpf,
+      tutorNome: editTutorNome,
+      petNome: editPetNome,
+      tutorTelefone: editTutorTelefone,
+      status: editStatus
+    });
+
+    if (result.success) {
+      toast({
+        title: "Agendamento atualizado!",
+        description: "Os dados foram salvos com sucesso."
+      });
+      setIsEditDialogOpen(false);
+      setEditingItem(null);
+      
+      // Refresh list
+      const start = `${selectedDate}T00:00:00.000Z`;
+      const end = `${selectedDate}T23:59:59.999Z`;
+      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId });
+    } else {
+      toast({
+        title: "Falha ao atualizar",
+        description: result.message || "Ocorreu um erro no servidor.",
         variant: "destructive"
       });
     }
@@ -551,22 +681,34 @@ export default function AgendaPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
+                              <div className="flex justify-end items-center gap-1.5">
                                 {item.status === 'Agendado' ? (
                                   <>
                                     <Button 
                                       size="sm" 
-                                      className="h-8 bg-blue-600 hover:bg-blue-700 shadow-sm text-xs px-2.5"
+                                      className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm text-xs px-2.5"
                                       onClick={() => handleCheckIn(item)}
-                                      title="Confirmar Presença e Ir para Ficha"
+                                      title="Confirmar Chegada e Ir para Ficha"
                                     >
                                       <UserCheck className="w-3.5 h-3.5 mr-1" />
                                       Chegada
                                     </Button>
+                                    
                                     <Button 
                                       size="sm" 
                                       variant="outline" 
-                                      className="text-red-500 hover:text-red-700 hover:bg-red-55 border-red-100 h-8 px-2"
+                                      className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 h-8 text-xs px-2.5 shadow-sm"
+                                      onClick={() => handleStartEdit(item)}
+                                      title="Editar Agendamento"
+                                    >
+                                      <Edit className="w-3.5 h-3.5 mr-1" />
+                                      Editar
+                                    </Button>
+
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 h-8 text-xs px-2.5 shadow-sm"
                                       onClick={async () => {
                                         if (confirm("Deseja realmente CANCELAR este agendamento?")) {
                                           const res = await updateAgendaStatus(item.id, 'Cancelado');
@@ -580,9 +722,10 @@ export default function AgendaPage() {
                                           }
                                         }
                                       }}
-                                      title="Cancelar Consulta"
+                                      title="Cancelar Agendamento"
                                     >
-                                      <X className="w-3.5 h-3.5" />
+                                      <X className="w-3.5 h-3.5 mr-1" />
+                                      Cancelar
                                     </Button>
                                   </>
                                 ) : (
@@ -591,9 +734,25 @@ export default function AgendaPage() {
                                       size="sm"
                                       variant="ghost"
                                       className="h-8 text-xs text-muted-foreground hover:text-primary px-2"
-                                      onClick={() => {
-                                        if (item.petId) {
-                                          router.push(`/pets?editPetId=${item.petId}`);
+                                      onClick={async () => {
+                                        // Verificar se o Pet já foi cadastrado no banco
+                                        let finalPetId = item.petId;
+                                        if (!finalPetId) {
+                                          const { data: foundPets } = await supabase
+                                            .from('pet_pets')
+                                            .select('id')
+                                            .eq('empresa_id', item.empresaId)
+                                            .eq('tutor_cpf', item.tutorCpf)
+                                            .ilike('nome', item.petNome.trim())
+                                            .limit(1);
+
+                                          if (foundPets && foundPets.length > 0) {
+                                            finalPetId = foundPets[0].id;
+                                          }
+                                        }
+                                        
+                                        if (finalPetId) {
+                                          router.push(`/pets?editPetId=${finalPetId}`);
                                         } else {
                                           router.push(`/pets?prefill=true&tutorCpf=${item.tutorCpf}&tutorNome=${item.tutorNome}&tutorTelefone=${item.tutorTelefone || ''}&petNome=${item.petNome}`);
                                         }
@@ -601,6 +760,18 @@ export default function AgendaPage() {
                                     >
                                       Ficha
                                     </Button>
+
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 h-8 text-xs px-2.5 shadow-sm"
+                                      onClick={() => handleStartEdit(item)}
+                                      title="Editar Agendamento"
+                                    >
+                                      <Edit className="w-3.5 h-3.5 mr-1" />
+                                      Editar
+                                    </Button>
+
                                     <Button 
                                       size="sm" 
                                       variant="ghost" 
@@ -1069,6 +1240,141 @@ export default function AgendaPage() {
           <div><strong>Pendentes:</strong> {stats.agendados}</div>
         </div>
       </div>
+
+      {/* ─── DIALOG: EDITAR AGENDAMENTO ─── */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] border-primary/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-600">
+              <Edit className="w-5 h-5" />
+              Editar Agendamento
+            </DialogTitle>
+            <DialogDescription>
+              Altere o horário, data ou médico veterinário sem precisar redigitar os dados do tutor.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEditSubmit} className="space-y-4 py-2">
+            {/* Seletor de Médico */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-muted-foreground">Médico Veterinário:*</span>
+                <Select value={editMedicoId} onValueChange={setEditMedicoId}>
+                  <SelectTrigger className="shadow-sm">
+                    <SelectValue placeholder="Selecione o Médico" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {veterinarios.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.nome} ({v.crmv || 'Sem CRMV'})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data e Hora */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">Data:*</span>
+                  <Input 
+                    type="date" 
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="shadow-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">Horário:*</span>
+                  <Input 
+                    type="time" 
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="shadow-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Situação / Status */}
+            <div className="space-y-2">
+              <span className="text-sm font-medium text-muted-foreground">Situação do Agendamento:*</span>
+              <Select value={editStatus} onValueChange={(val: any) => setEditStatus(val)}>
+                <SelectTrigger className="shadow-sm">
+                  <SelectValue placeholder="Situação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Agendado">Agendado</SelectItem>
+                  <SelectItem value="Realizado">Realizado</SelectItem>
+                  <SelectItem value="Cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="border-t pt-4 space-y-4">
+              <h3 className="font-semibold text-foreground/80">Dados Cadastrais do Tutor e Pet</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">CPF do Tutor:*</span>
+                  <Input 
+                    placeholder="Digite apenas números (11 dígitos)" 
+                    value={editTutorCpf}
+                    onChange={(e) => setEditTutorCpf(e.target.value.replace(/\D/g, '').substring(0, 11))}
+                    className="shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">Nome do Tutor:*</span>
+                  <Input 
+                    placeholder="Nome completo do tutor" 
+                    value={editTutorNome}
+                    onChange={(e) => setEditTutorNome(e.target.value)}
+                    className="shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">Nome do Pet:*</span>
+                  <Input 
+                    placeholder="Nome do animal" 
+                    value={editPetNome}
+                    onChange={(e) => setEditPetNome(e.target.value)}
+                    className="shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-muted-foreground">Telefone de Contato:</span>
+                  <Input 
+                    placeholder="(00) 00000-0000" 
+                    value={editTutorTelefone}
+                    onChange={(e) => setEditTutorTelefone(e.target.value)}
+                    className="shadow-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="border-t pt-4 flex gap-2 justify-end">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditingItem(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
+                Salvar Alterações
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

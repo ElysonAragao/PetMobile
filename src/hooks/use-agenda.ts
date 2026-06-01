@@ -121,6 +121,45 @@ export function useAgenda() {
     }
   }, [supabase, selectedEmpresaId]);
 
+  const updateAgenda = useCallback(async (id: string, agendaData: {
+    medicoId: string | null;
+    dataAgendamento: string;
+    petId: string | null;
+    tutorCpf: string;
+    tutorNome: string;
+    petNome: string;
+    tutorTelefone: string;
+    status?: 'Agendado' | 'Cancelado' | 'Realizado';
+  }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const payload: any = {
+        medico_id: agendaData.medicoId || null,
+        data_agendamento: agendaData.dataAgendamento,
+        pet_id: agendaData.petId || null,
+        tutor_cpf: agendaData.tutorCpf.trim(),
+        tutor_nome: agendaData.tutorNome.trim(),
+        pet_nome: agendaData.petNome.trim(),
+        tutor_telefone: agendaData.tutorTelefone?.trim() || null,
+      };
+
+      if (agendaData.status) {
+        payload.status = agendaData.status;
+      }
+
+      const { error: updateError } = await supabase
+        .from('pet_agenda')
+        .update(payload)
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error updating agenda: ", e);
+      return { success: false, message: e.message || 'Falha ao atualizar agendamento.' };
+    }
+  }, [supabase]);
+
   const updateAgendaStatus = useCallback(async (id: string, status: 'Agendado' | 'Cancelado' | 'Realizado'): Promise<{ success: boolean; message?: string }> => {
     try {
       const { error: updateError } = await supabase
@@ -208,6 +247,7 @@ export function useAgenda() {
     error,
     fetchAgenda,
     addAgenda,
+    updateAgenda,
     updateAgendaStatus,
     deleteAgenda,
     searchPetByCpfOrCode
