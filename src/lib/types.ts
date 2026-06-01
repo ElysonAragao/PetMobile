@@ -147,3 +147,21 @@ export interface Empresa {
   data_cadastro?: string;
   logo_url?: string;
 }
+
+export interface AgendaItem {
+  id: string;
+  empresaId: string;
+  medicoId: string | null;
+  dataAgendamento: string; // ISO string
+  petId: string | null;
+  tutorCpf: string;
+  tutorNome: string;
+  petNome: string;
+  tutorTelefone: string | null;
+  status: 'Agendado' | 'Cancelado' | 'Realizado';
+  createdAt: string;
+  // Join objects
+  medico?: { nome: string; crmv_uf?: string };
+  pet?: { nome: string; codPet?: string };
+}
+

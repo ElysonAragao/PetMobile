@@ -687,6 +687,50 @@ export default function PetsPage() {
     }
   });
 
+  React.useEffect(() => {
+    const prefill = searchParams.get('prefill');
+    if (prefill === 'true') {
+      const tutorCpf = searchParams.get('tutorCpf') || '';
+      const tutorNome = searchParams.get('tutorNome') || '';
+      const tutorTelefone = searchParams.get('tutorTelefone') || '';
+      const petNome = searchParams.get('petNome') || '';
+      
+      form.reset({
+        nome: petNome,
+        tutorNome: tutorNome,
+        tutorCpf: tutorCpf,
+        tutorTelefone: tutorTelefone,
+        especie: '',
+        raca: '',
+        sexo: 'M',
+        tutorEmail: '',
+        tutorEndereco: '',
+        tutorCep: '',
+        tutorBairro: '',
+        tutorCidade: '',
+        tutorUf: '',
+        healthPlanCode: '',
+        healthPlanName: '',
+        matricula: ''
+      } as any);
+      
+      setIsCpfLocked(!!tutorCpf);
+      setActiveTab("register");
+      
+      router.replace('/pets', { scroll: false });
+    } else {
+      const editPetId = searchParams.get('editPetId');
+      if (editPetId && pets.length > 0) {
+        const foundPet = pets.find(p => p.id === editPetId);
+        if (foundPet) {
+          setSelectedPet(foundPet);
+          setIsEditDialogOpen(true);
+          router.replace('/pets', { scroll: false });
+        }
+      }
+    }
+  }, [searchParams, pets, form, router]);
+
   const handleTutorCpfBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
     const cpf = e.target.value.trim();
     if (cpf.length < 11) return;

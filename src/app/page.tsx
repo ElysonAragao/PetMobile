@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen, Video } from 'lucide-react';
+import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen, Video, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
@@ -49,12 +49,20 @@ function HomeContent() {
       roles: ['Master'],
     },
     {
+      title: 'Agenda de Consultas',
+      description: 'Agende e consulte compromissos, com atalho para o cadastro do Pet.',
+      href: '/agenda',
+      icon: <Calendar className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral'],
+    },
+    {
       title: 'Cadastro de Pets',
       description: 'Adicione e gerencie os dados dos animais e seus tutores.',
       href: '/pets',
       icon: <PawPrint className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral'],
     },
+
     {
       title: 'Cadastro de Exames',
       description: 'Defina os tipos de exames disponíveis.',
