@@ -10,6 +10,8 @@ export interface PrecoExame {
   data_preco_atual: string;
   preco_anterior: number | null;
   data_preco_anterior: string | null;
+  preco_urgencia: number | null;
+  preco_urgencia_anterior: number | null;
 }
 
 export function usePrecos() {
@@ -39,7 +41,7 @@ export function usePrecos() {
     }
   }, [supabase]);
 
-  const savePreco = useCallback(async (planoId: string, exameId: string, novoPreco: number) => {
+  const savePreco = useCallback(async (planoId: string, exameId: string, novoPreco: number, novoPrecoUrgencia: number | null) => {
     try {
       const { data: existing, error: searchError } = await supabase
         .from('precos_exames')
@@ -51,16 +53,29 @@ export function usePrecos() {
       if (searchError) throw searchError;
 
       if (existing) {
-        if (Number(existing.preco_atual) !== Number(novoPreco)) {
+        const isPrecoAtualChanged = Number(existing.preco_atual) !== Number(novoPreco);
+        const isPrecoUrgenciaChanged = existing.preco_urgencia !== novoPrecoUrgencia && !(existing.preco_urgencia == null && novoPrecoUrgencia == null);
+
+        if (isPrecoAtualChanged || isPrecoUrgenciaChanged) {
+           const updateData: any = {
+             updated_at: new Date().toISOString()
+           };
+
+           if (isPrecoAtualChanged) {
+             updateData.preco_anterior = existing.preco_atual;
+             updateData.data_preco_anterior = existing.data_preco_atual;
+             updateData.preco_atual = novoPreco;
+             updateData.data_preco_atual = new Date().toISOString();
+           }
+
+           if (isPrecoUrgenciaChanged) {
+             updateData.preco_urgencia_anterior = existing.preco_urgencia;
+             updateData.preco_urgencia = novoPrecoUrgencia;
+           }
+
            const { error: updateError } = await supabase
             .from('precos_exames')
-            .update({
-              preco_anterior: existing.preco_atual,
-              data_preco_anterior: existing.data_preco_atual,
-              preco_atual: novoPreco,
-              data_preco_atual: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', existing.id);
             if (updateError) throw updateError;
         }
@@ -71,7 +86,8 @@ export function usePrecos() {
              plano_id: planoId,
              exame_id: exameId,
              preco_atual: novoPreco,
-             data_preco_atual: new Date().toISOString()
+             data_preco_atual: new Date().toISOString(),
+             preco_urgencia: novoPrecoUrgencia
           }]);
         if (insertError) throw insertError;
       }
@@ -82,13 +98,13 @@ export function usePrecos() {
     }
   }, [supabase]);
 
-  const savePrecosBatch = useCallback(async (planoId: string, updates: { exameId: string, price: number }[]) => {
+  const savePrecosBatch = useCallback(async (planoId: string, updates: { exameId: string, price: number, priceUrgencia: number | null }[]) => {
     setIsLoading(true);
     let successCount = 0;
     let failCount = 0;
 
     for (const update of updates) {
-      const res = await savePreco(planoId, update.exameId, update.price);
+      const res = await savePreco(planoId, update.exameId, update.price, update.priceUrgencia);
       if (res.success) successCount++;
       else failCount++;
     }

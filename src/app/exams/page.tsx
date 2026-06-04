@@ -59,8 +59,6 @@ const examSchema = z.object({
   type: z.enum(['Laboratório', 'Imagem'], { required_error: "Tipo de exame é obrigatório" }),
   examCode: z.string().optional(),
   idExame: z.string().optional().default(''),
-  healthPlanId: z.string().optional().nullable(),
-  healthPlanName: z.string().optional().nullable(),
   isUrgency: z.boolean().optional().default(false),
 });
 
@@ -229,13 +227,13 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
 
   const form = useForm<ExamFormValues>({
     resolver: zodResolver(examSchema),
-    defaultValues: initialData || { name: "", description: "", type: undefined, examCode: "", idExame: "", healthPlanId: null, healthPlanName: null, isUrgency: false },
+    defaultValues: initialData || { name: "", description: "", type: undefined, examCode: "", idExame: "", isUrgency: false },
   });
 
   const examType = form.watch('type');
 
   React.useEffect(() => {
-    form.reset(initialData || { name: "", description: "", type: undefined, examCode: "", idExame: "", healthPlanId: null, healthPlanName: null, isUrgency: false });
+    form.reset(initialData || { name: "", description: "", type: undefined, examCode: "", idExame: "", isUrgency: false });
   }, [initialData, form]);
 
   React.useEffect(() => {
@@ -249,7 +247,7 @@ function ExamForm({ onFormSubmit, initialData, getNextExamCode, onCancel }: { on
   async function onSubmit(values: ExamFormValues) {
     await onFormSubmit(values);
     if (!initialData) {
-      form.reset({ name: "", description: "", type: undefined, examCode: "", idExame: "", healthPlanId: null, healthPlanName: null, isUrgency: false });
+      form.reset({ name: "", description: "", type: undefined, examCode: "", idExame: "", isUrgency: false });
       setTimeout(() => nameInputRef.current?.focus(), 100);
     }
   }
@@ -409,6 +407,7 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
     const { selectedEmpresaId } = useSession();
     const [selectedPlanId, setSelectedPlanId] = React.useState<string>("sem_plano");
     const [bulkPrices, setBulkPrices] = React.useState<Record<string, string>>({});
+    const [bulkPricesUrgencia, setBulkPricesUrgencia] = React.useState<Record<string, string>>({});
     const [hasChanges, setHasChanges] = React.useState(false);
     const [isImportingPrices, setIsImportingPrices] = React.useState(false);
     const priceInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
@@ -434,11 +433,14 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
     // When precos change, init the bulk prices map
     React.useEffect(() => {
       const initial: Record<string, string> = {};
+      const initialUrgencia: Record<string, string> = {};
       filteredExams.forEach(exam => {
         const p = precos.find(price => price.exame_id === exam.id);
         initial[exam.id] = p?.preco_atual != null ? String(p.preco_atual) : "";
+        initialUrgencia[exam.id] = p?.preco_urgencia != null ? String(p.preco_urgencia) : "";
       });
       setBulkPrices(initial);
+      setBulkPricesUrgencia(initialUrgencia);
     }, [precos, filteredExams]);
 
     // Auto-focus first price input when plan is selected and data is loaded
@@ -455,8 +457,12 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
       }
     }, [selectedPlanId, filteredExams, precos]);
 
-    const handleBulkPriceChange = (examId: string, value: string) => {
-      setBulkPrices(prev => ({ ...prev, [examId]: value }));
+    const handleBulkPriceChange = (examId: string, value: string, isUrgencia: boolean = false) => {
+      if (isUrgencia) {
+        setBulkPricesUrgencia(prev => ({ ...prev, [examId]: value }));
+      } else {
+        setBulkPrices(prev => ({ ...prev, [examId]: value }));
+      }
       setHasChanges(true);
     };
 
@@ -474,13 +480,23 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
     };
 
     const handleSaveBulk = async () => {
-      const updates = Object.entries(bulkPrices)
-        .filter(([_, price]) => price.trim() !== "")
-        .map(([exameId, price]) => ({
-          exameId,
-          price: parseFloat(price.replace(',', '.'))
-        }))
-        .filter(u => !isNaN(u.price));
+      // Find all exams that have either a normal price or an urgency price
+      const examsToUpdate = new Set([...Object.keys(bulkPrices), ...Object.keys(bulkPricesUrgencia)]);
+      
+      const updates = Array.from(examsToUpdate)
+        .map((exameId) => {
+          const pStr = bulkPrices[exameId] || "";
+          const uStr = bulkPricesUrgencia[exameId] || "";
+          const pVal = parseFloat(pStr.replace(',', '.'));
+          const uVal = parseFloat(uStr.replace(',', '.'));
+          return {
+            exameId,
+            price: isNaN(pVal) ? 0 : pVal, // default to 0 if invalid, but filtered next
+            priceUrgencia: isNaN(uVal) ? null : uVal,
+            hasValidPrice: !isNaN(pVal)
+          };
+        })
+        .filter(u => u.hasValidPrice);
 
       if (updates.length > 0) {
         const res = await savePrecosBatch(selectedPlanId, updates);
@@ -528,7 +544,8 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
         const colEmpresa = findCol('id_empresa', 'idempresa', 'empresa', 'nome da empresa');
         const colPlano = findCol('id_plano', 'idplano', 'plano', 'nome do plano');
         const colExame = findCol('id_exame', 'idexame', 'exame', 'codigo do exame');
-        const colPreco = findCol('preco_atual', 'precoatual', 'preco', 'valor', 'preco do exame');
+        const colPreco = findCol('preco_atual', 'precoatual', 'preco', 'valor', 'preco normal', 'preco do exame');
+        const colPrecoUrgencia = findCol('preco urgencia', 'preco_urgencia', 'urgencia', 'preco de urgencia');
 
         if (colPlano === -1 || colExame === -1 || colPreco === -1) {
           toast({
@@ -546,7 +563,7 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
         let skippedCount = 0;
 
         // Group updates by plano
-        const updatesByPlano: Record<string, { exameId: string; price: number }[]> = {};
+        const updatesByPlano: Record<string, { exameId: string; price: number; priceUrgencia: number | null }[]> = {};
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
@@ -556,6 +573,7 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
           const planoIdCsv = colPlano !== -1 ? cols[colPlano]?.trim() : '';
           const exameIdCsv = colExame !== -1 ? cols[colExame]?.trim() : '';
           const precoStr = colPreco !== -1 ? cols[colPreco]?.trim().replace(',', '.') : '';
+          const precoUrgenciaStr = colPrecoUrgencia !== -1 ? cols[colPrecoUrgencia]?.trim().replace(',', '.') : '';
 
           if (!planoIdCsv || !exameIdCsv || !precoStr) {
             skippedCount++;
@@ -567,6 +585,9 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
             skippedCount++;
             continue;
           }
+
+          const precoUrgenciaVal = precoUrgenciaStr ? parseFloat(precoUrgenciaStr) : null;
+          const finalPrecoUrgenciaVal = (precoUrgenciaVal !== null && !isNaN(precoUrgenciaVal)) ? precoUrgenciaVal : null;
 
           // Resolve plano: try UUID first, then by codPlano/idPlano/nome
           let resolvedPlanoId = plansList.find(p => p.id === planoIdCsv)?.id;
@@ -592,7 +613,7 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
           if (!updatesByPlano[resolvedPlanoId]) {
             updatesByPlano[resolvedPlanoId] = [];
           }
-          updatesByPlano[resolvedPlanoId].push({ exameId: resolvedExameId, price: precoVal });
+          updatesByPlano[resolvedPlanoId].push({ exameId: resolvedExameId, price: precoVal, priceUrgencia: finalPrecoUrgenciaVal });
         }
 
         // Process all updates
@@ -665,22 +686,27 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
                   // If a plan is selected, export current prices for that plan
                   exportData = filteredExams.map(exam => {
                     const price = bulkPrices[exam.id] || '';
+                    const priceUrg = bulkPricesUrgencia[exam.id] || '';
                     return {
-                      'Nome da Empresa': currentEmpresa,
                       'Nome do Plano': selectedPlanName,
-                      'Codigo do Exame': exam.examCode || exam.idExame,
+                      'Codigo do Exame': exam.examCode,
+                      'ID-Exame': exam.idExame || exam.examCode,
                       'Nome do Exame': exam.name,
-                      'Preco do Exame': price
+                      'Status de Urgencia': exam.isUrgency ? 'Sim' : 'Nao',
+                      'Preco Normal': price,
+                      'Preco de Urgencia': priceUrg
                     };
                   });
                 } else {
                   // Template with some examples if no plan selected
                   exportData = [{
-                    'Nome da Empresa': 'Clinica Medica',
                     'Nome do Plano': 'Pronto Atendimento',
                     'Codigo do Exame': 'EX001',
+                    'ID-Exame': 'EX001',
                     'Nome do Exame': 'Hemograma',
-                    'Preco do Exame': '125.50'
+                    'Status de Urgencia': 'Sim',
+                    'Preco Normal': '125.50',
+                    'Preco de Urgencia': '180.00'
                   }];
                 }
                 
@@ -723,10 +749,10 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
                         <TableHead className="w-[100px]">Cod.</TableHead>
                         <TableHead className="w-[120px]">ID-Exame</TableHead>
                         <TableHead>Exame</TableHead>
-                        <TableHead className="w-[100px] text-center">Urgência</TableHead>
-                        <TableHead className="w-[180px]">Preço Atual (R$)</TableHead>
-                        <TableHead className="w-[180px]">Última Alteração</TableHead>
-                        <TableHead className="w-[140px] text-right">Anterior</TableHead>
+                        <TableHead className="w-[100px] text-center">Padrão Urgente</TableHead>
+                        <TableHead className="w-[140px]">Preço Normal</TableHead>
+                        <TableHead className="w-[140px]">Preço Urgência</TableHead>
+                        <TableHead className="w-[140px]">Última Alteração</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -753,16 +779,26 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
                                   className="pl-8 h-9 font-mono"
                                   placeholder="0,00"
                                   value={bulkPrices[exam.id] || ""}
-                                  onChange={(e) => handleBulkPriceChange(exam.id, e.target.value)}
+                                  onChange={(e) => handleBulkPriceChange(exam.id, e.target.value, false)}
+                                  onKeyDown={(e) => handleKeyDown(e, exam.id)}
+                                />
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-muted-foreground text-xs">R$</span>
+                                <Input
+                                  type="text"
+                                  className="pl-8 h-9 font-mono"
+                                  placeholder="0,00"
+                                  value={bulkPricesUrgencia[exam.id] || ""}
+                                  onChange={(e) => handleBulkPriceChange(exam.id, e.target.value, true)}
                                   onKeyDown={(e) => handleKeyDown(e, exam.id)}
                                 />
                               </div>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
                               {priceInfo ? formatDate(priceInfo.data_preco_atual) : "-"}
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">
-                              {priceInfo?.preco_anterior ? formatCurrency(priceInfo.preco_anterior) : "-"}
                             </TableCell>
                           </TableRow>
                         );
@@ -839,7 +875,6 @@ export default function ExamsPage() {
       const colIdExame = findCol('id-exame', 'idexame', 'id_exame', 'id exame');
       const colNome = findCol('nome do exame', 'nome_exame', 'nomeexame', 'nome');
       const colDescricao = findCol('descricao', 'descrição');
-      const colPlano = findCol('plano de saude', 'plano_saude', 'planosaud', 'plano');
 
       if (colNome === -1) {
         toast({ title: "Erro no CSV", description: "Cabeçalho não encontrado: 'Nome do Exame' ou 'Nome'. Verifique o arquivo.", variant: "destructive" });
@@ -860,20 +895,8 @@ export default function ExamsPage() {
         const tipoRaw = colTipo !== -1 ? cols[colTipo]?.trim() : '';
         const idExame = colIdExame !== -1 ? cols[colIdExame]?.trim() : '';
         const descricao = colDescricao !== -1 ? cols[colDescricao]?.trim() : nome;
-        const planoSaudeNome = colPlano !== -1 ? cols[colPlano]?.trim() : '';
 
         if (!nome) continue; // Skip empty rows
-
-        // Try to find health plan ID
-        let healthPlanId: string | null = null;
-        let healthPlanName: string | null = null;
-        if (planoSaudeNome) {
-          const hp = healthPlans.find(p => p.nome.toLowerCase() === planoSaudeNome.toLowerCase());
-          if (hp) {
-            healthPlanId = hp.id;
-            healthPlanName = hp.nome;
-          }
-        }
 
         // Map tipo: default to Laboratório if not recognized
         const tipo = (normalize(tipoRaw) === 'imagem') ? 'Imagem' as const : 'Laboratório' as const;
@@ -884,8 +907,6 @@ export default function ExamsPage() {
             type: tipo,
             idExame: idExame,
             description: descricao || nome,
-            healthPlanId: healthPlanId,
-            healthPlanName: healthPlanName,
             isUrgency: false,
           });
           successCount++;

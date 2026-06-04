@@ -62,6 +62,7 @@ const movementSchema = z.object({
     petId: z.string({ required_error: 'Pet é obrigatório.' }).min(1, 'Pet é obrigatório.'),
     veterinarioId: z.string({ required_error: 'Veterinário é obrigatório.' }).min(1, 'Veterinário é obrigatório.'),
     examIds: z.array(z.string()).min(1, 'Selecione ao menos um exame.'),
+    urgentExamIds: z.array(z.string()).optional(),
 });
 
 type MovementFormValues = z.infer<typeof movementSchema>;
@@ -72,6 +73,7 @@ interface GeneratedGuide {
     pet: Pet;
     veterinario: Veterinario;
     exams: Exam[];
+    urgentExams: string[];
 }
 
 
@@ -156,6 +158,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
             petId: '',
             veterinarioId: '',
             examIds: [],
+            urgentExamIds: [],
         },
     });
 
@@ -318,7 +321,8 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
         }
 
         try {
-            const result = await createMovimento(values.petId, values.veterinarioId, values.examIds);
+            const urgentIds = values.urgentExamIds || [];
+            const result = await createMovimento(values.petId, values.veterinarioId, values.examIds, urgentIds);
             if (result.success && result.movimentoId) {
                 setGeneratedGuide({
                     movimentoId: result.movimentoId,
@@ -326,6 +330,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                     pet: fullPetData,
                     veterinario: fullVetData,
                     exams: fullExamsData,
+                    urgentExams: urgentIds,
                 });
                 toast({ title: 'Guia Gerada!' });
             } else {
@@ -358,6 +363,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
             petId: '',
             veterinarioId: isSpecificVet && currentUser ? currentUser.id : '',
             examIds: [],
+            urgentExamIds: [],
         });
         setTimeout(() => petSearchInputRef.current?.focus(), 100);
     };
@@ -590,12 +596,52 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                                                 displayExams = filteredExams;
                                                             }
                                                             return displayExams.length > 0 ? displayExams.map((item) => (
-                                                                <div key={item.id} className="flex items-start space-x-3">
-                                                                    <Checkbox id={item.id} checked={field.value?.includes(item.id)} onCheckedChange={(checked) => checked ? field.onChange([...(field.value || []), item.id]) : field.onChange(field.value.filter(v => v !== item.id))} />
-                                                                    <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2">
-                                                                        <span className="font-mono text-primary font-bold">{item.idExame || item.examCode}</span> — {item.name}
-                                                                        {item.isUrgency && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px] h-5 px-1 py-0">URGENTE</Badge>}
-                                                                    </label>
+                                                                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded-md hover:bg-muted/30 border border-transparent hover:border-border transition-colors">
+                                                                    <div className="flex items-start space-x-3 flex-1">
+                                                                        <Checkbox 
+                                                                            id={item.id} 
+                                                                            checked={field.value?.includes(item.id)} 
+                                                                            onCheckedChange={(checked) => {
+                                                                                if (checked) {
+                                                                                    field.onChange([...(field.value || []), item.id]);
+                                                                                    if (item.isUrgency) {
+                                                                                        const currentUrgent = form.getValues('urgentExamIds') || [];
+                                                                                        if (!currentUrgent.includes(item.id)) {
+                                                                                            form.setValue('urgentExamIds', [...currentUrgent, item.id]);
+                                                                                        }
+                                                                                    }
+                                                                                } else {
+                                                                                    field.onChange(field.value.filter(v => v !== item.id));
+                                                                                    const currentUrgent = form.getValues('urgentExamIds') || [];
+                                                                                    form.setValue('urgentExamIds', currentUrgent.filter(v => v !== item.id));
+                                                                                }
+                                                                            }} 
+                                                                        />
+                                                                        <label htmlFor={item.id} className="text-sm font-medium leading-none cursor-pointer flex flex-wrap items-center gap-2">
+                                                                            <span className="font-mono text-primary font-bold">{item.idExame || item.examCode}</span> — {item.name}
+                                                                            {item.isUrgency && <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200 text-[10px] h-5 px-1 py-0">Padrão: Urgente</Badge>}
+                                                                        </label>
+                                                                    </div>
+                                                                    {field.value?.includes(item.id) && (
+                                                                        <div className="mt-2 sm:mt-0 pl-7 sm:pl-0">
+                                                                            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold bg-white border px-2 py-1 rounded-md shadow-sm">
+                                                                                <Checkbox 
+                                                                                    checked={form.watch('urgentExamIds')?.includes(item.id)}
+                                                                                    onCheckedChange={(checked) => {
+                                                                                        const current = form.getValues('urgentExamIds') || [];
+                                                                                        if (checked) {
+                                                                                            form.setValue('urgentExamIds', [...current, item.id]);
+                                                                                        } else {
+                                                                                            form.setValue('urgentExamIds', current.filter(id => id !== item.id));
+                                                                                        }
+                                                                                    }}
+                                                                                />
+                                                                                <span className={form.watch('urgentExamIds')?.includes(item.id) ? "text-red-600 font-bold" : "text-muted-foreground"}>
+                                                                                    {form.watch('urgentExamIds')?.includes(item.id) ? "COM URGÊNCIA" : "NORMAL"}
+                                                                                </span>
+                                                                            </label>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )) : (
                                                                 <div className="text-center py-8">
@@ -648,12 +694,18 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                     <div className="pt-2 border-t mt-2">
                                         <p className="font-semibold mb-2 text-slate-700">Exames Solicitados ({generatedGuide.exams?.length || 0}):</p>
                                         <ul className="space-y-1.5 max-h-40 overflow-y-auto pr-2">
-                                            {generatedGuide.exams?.map(ex => (
-                                                <li key={ex.id} className="text-xs text-slate-600 flex items-start gap-2">
-                                                   <span className="mt-0.5">•</span>
-                                                   <span><strong className="font-mono text-slate-800">{ex.idExame || ex.examCode}</strong> — {ex.name}</span>
+                                            {generatedGuide.exams?.map(ex => {
+                                                const isUrgent = generatedGuide.urgentExams?.includes(ex.id);
+                                                return (
+                                                <li key={ex.id} className="text-xs text-slate-600 flex flex-col sm:flex-row sm:items-start gap-2 border-b pb-1">
+                                                   <div className="flex items-start gap-2 flex-1">
+                                                       <span className="mt-0.5">•</span>
+                                                       <span><strong className="font-mono text-slate-800">{ex.idExame || ex.examCode}</strong> — {ex.name}</span>
+                                                   </div>
+                                                   {isUrgent && <Badge variant="destructive" className="text-[10px] h-5">URGÊNCIA</Badge>}
                                                 </li>
-                                            ))}
+                                                );
+                                            })}
                                         </ul>
                                     </div>
                                 </div>

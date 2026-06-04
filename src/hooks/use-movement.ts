@@ -69,6 +69,7 @@ export function useMovement() {
         petId: string,
         veterinarioId: string,
         exameIds: string[],
+        urgentExameIds: string[] = [],
         isManual: boolean = false
     ): Promise<{ success: boolean; movimentoId?: string; message?: string }> => {
         setIsLoading(true);
@@ -89,6 +90,7 @@ export function useMovement() {
                     paciente_id: petId,
                     medico_id: veterinarioId,
                     exame_ids: exameIds,
+                    urgent_exame_ids: urgentExameIds,
                     data: dataHora,
                     empresa_id: selectedEmpresaId
                 })
@@ -118,12 +120,18 @@ export function useMovement() {
                        if (uuidPlanoId) {
                            const { data: precoData } = await supabase
                              .from('pet_precos_exames')
-                             .select('preco_atual')
+                             .select('preco_atual, preco_urgencia')
                              .eq('plano_id', uuidPlanoId)
                              .eq('exame_id', exameId)
                              .maybeSingle();
                            
-                           if (precoData) precoAplicado = Number(precoData.preco_atual);
+                           if (precoData) {
+                               if (urgentExameIds.includes(exameId) && precoData.preco_urgencia != null && precoData.preco_urgencia > 0) {
+                                   precoAplicado = Number(precoData.preco_urgencia);
+                               } else {
+                                   precoAplicado = Number(precoData.preco_atual);
+                               }
+                           }
                        }
                        
                        faturamentos.push({
@@ -133,6 +141,7 @@ export function useMovement() {
                            plano_id: uuidPlanoId,
                            exame_id: exameId,
                            preco_aplicado: precoAplicado,
+                           is_urgencia: urgentExameIds.includes(exameId), // Will be ignored by supabase if column doesn't exist, or will save if it does
                            data_faturamento: dataHora
                        });
                    }
@@ -182,6 +191,7 @@ export function useMovement() {
                 petId: row.paciente_id,
                 veterinarioId: row.medico_id,
                 exameIds: row.exame_ids,
+                urgentExamIds: row.urgent_exame_ids || [],
                 data: row.data
             }));
         } catch (e: any) {

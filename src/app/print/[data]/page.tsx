@@ -39,7 +39,7 @@ function PrintContent() {
                             nome: e.nome || e.name,
                             id_exame: e.id_exame || e.idExame || e.examCode || e.codigo,
                             descricao: e.descricao || e.description,
-                            is_urgency: e.is_urgency || e.isUrgency || false
+                            is_urgency: cached.urgentExams ? cached.urgentExams.includes(e.id) : (e.is_urgency || e.isUrgency || false)
                         }));
                     }
                     setGuia(cached);
@@ -85,7 +85,7 @@ function PrintContent() {
                         nome: e.nome,
                         id_exame: e.id_exame || e.codigo,
                         descricao: e.descricao,
-                        is_urgency: e.is_urgency || false
+                        is_urgency: mov.urgent_exame_ids ? mov.urgent_exame_ids.includes(e.id) : (e.is_urgency || false)
                     }))
                 };
 
@@ -121,7 +121,7 @@ function PrintContent() {
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
     if (error || !guia || !guia.pet) return <div className="p-10 text-center text-red-500"><AlertTriangle className="mx-auto mb-4" /> Erro: {error || 'Dados não encontrados'}</div>;
 
-    const titulo = isLeitura ? "Comprovante de Leitura de Exames" : "Guia de Solicitação Veterinária";
+    const titulo = isLeitura ? "Comprovante de Leitura de Exames" : "Guia de Solicitação de Exame";
     const subTitulo = isLeitura ? "Este documento comprova a leitura e registro dos exames." : "Solicitação oficial para realização de exames complementares.";
     const examsNormal = guia.exams.filter((e: any) => !e.is_urgency);
     const examsUrgency = guia.exams.filter((e: any) => e.is_urgency);

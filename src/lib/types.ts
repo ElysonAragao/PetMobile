@@ -28,8 +28,6 @@ export interface Exam {
   name: string;
   description: string;
   type: 'Laboratório' | 'Imagem';
-  healthPlanId?: string | null;
-  healthPlanName?: string | null;
   isUrgency?: boolean;
 }
 

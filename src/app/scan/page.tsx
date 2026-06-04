@@ -164,7 +164,12 @@ export default function ScanPage() {
         .from('pet_exames')
         .select('id, name:nome, description:descricao, type:tipo, examCode:codigo, idExame:id_exame, isUrgency:is_urgency')
         .in('id', movData.exame_ids);
-      if (examsDataSB) examsData = examsDataSB as unknown as Exam[];
+      if (examsDataSB) {
+        examsData = (examsDataSB as unknown as Exam[]).map(e => ({
+          ...e,
+          isUrgency: movData.urgent_exame_ids ? movData.urgent_exame_ids.includes(e.id) : e.isUrgency
+        }));
+      }
     }
 
     return {
