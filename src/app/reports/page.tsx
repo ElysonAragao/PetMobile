@@ -154,7 +154,7 @@ export default function ReportsPage() {
             "Tipo": e.type,
             "Descrição": e.description,
             "Urgência": e.isUrgency ? "Sim" : "Não",
-            "Plano_Restrito": e.healthPlanName || "Todos"
+            "Plano_Restrito": "Todos"
         }));
     };
 

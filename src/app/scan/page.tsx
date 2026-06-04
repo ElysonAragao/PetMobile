@@ -331,14 +331,8 @@ export default function ScanPage() {
   const filteredExams = React.useMemo(() => {
     let baseExams = exams;
 
-    // Se temos exames identificados via OCR e NÃO estamos mostrando todos, mostra apenas os identificados
     if (identifiedExamIds.length > 0 && !showAllExams) {
       baseExams = exams.filter(e => identifiedExamIds.includes(e.id));
-    } else {
-      // Caso contrário, aplica filtro por Plano de Saúde se não estiver mostrando tudo
-      if (currentPetData && currentPetData.healthPlanName && !showAllExams) {
-        baseExams = exams.filter(e => !e.healthPlanName || e.healthPlanName.trim() === '' || e.healthPlanName.trim().toLowerCase() === currentPetData.healthPlanName.trim().toLowerCase());
-      }
     }
 
     if (!manualExamSearch) return baseExams;
@@ -435,13 +429,7 @@ export default function ScanPage() {
       console.log("TEXTO LIDO/EXTRAÍDO:", extractedText);
       setOcrStatusText('Procurando exames correspondentes...');
 
-      // Filtra exames apenas para o plano de saúde do Pet selecionado (ou exames globais)
-      // Isso elimina os falsos positivos de achar 3 exames iguais de planos diferentes
       let targetExams = exams;
-      const petPlan = currentPetData?.healthPlanName?.trim().toLowerCase();
-      if (petPlan) {
-         targetExams = exams.filter(e => !e.healthPlanName || e.healthPlanName.trim() === '' || e.healthPlanName.trim().toLowerCase() === petPlan);
-      }
 
       const fuse = new Fuse(targetExams, {
         keys: ['name', 'examCode', 'idExame'],

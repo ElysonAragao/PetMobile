@@ -205,29 +205,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                 });
 
                 if (candidates.length > 0) {
-                    let match: any = null;
-                    
-                    // Tier 1: Exact plan match
-                    match = candidates.find(e => 
-                        e.healthPlanName?.trim().toLowerCase() === petPlan
-                    );
-                    
-                    // Tier 2: Partial plan match
-                    if (!match && petPlan) {
-                        match = candidates.find(e => {
-                            const ePlan = e.healthPlanName?.trim().toLowerCase();
-                            return ePlan && (ePlan.includes(petPlan) || petPlan.includes(ePlan));
-                        });
-                    }
-                    
-                    // Tier 3: Global exam
-                    if (!match) {
-                        match = candidates.find(e => !e.healthPlanName || e.healthPlanName.trim() === '');
-                    }
-                    
-                    if (match) {
-                        resolvedIds.push(match.id);
-                    }
+                    resolvedIds.push(candidates[0].id);
                 } else {
                     notFound.push(line);
                 }
@@ -260,13 +238,6 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
 
     const filteredExams = React.useMemo(() => {
         let baseExams = exams;
-        if (currentPet && currentPet.healthPlanName) {
-            baseExams = exams.filter(e =>
-                !e.healthPlanName ||
-                e.healthPlanName.trim() === '' ||
-                e.healthPlanName.trim().toLowerCase() === currentPet.healthPlanName.trim().toLowerCase()
-            );
-        }
 
         if (urgencyFilter) {
             baseExams = baseExams.filter(e => e.isUrgency);
