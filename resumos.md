@@ -1,5 +1,25 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-06-11] - Módulo Completo de Orçamentos e Exportação
+
+### 📄 PDF e Layout Profissional de Orçamentos
+- **Tela de Impressão Dedicada**: Nova rota `/print/orcamento/[id]` com cabeçalho focado em Dados do Cliente (Nome, Complemento e Plano), além de Data de Emissão e Validade.
+- **Padrão de Código OPet**: Geração de códigos amigáveis com identificação de ano e sequencial (Ex: `OPet20261234`).
+- **QR Code Rastreável**: Impressão automática do QR Code do orçamento na folha PDF para facilitar leitura futura no balcão.
+
+### 💾 Persistência em Nuvem (Supabase)
+- **Criação da Tabela pet_orcamentos**: Script de banco de dados (`_projeto_docs/database_schemas/orcamentos.sql`) com armazenamento em JSONB para Exames e Materiais, protegendo o orçamento contra alterações futuras de preço no sistema.
+- **Integração Completa (CRUD)**: Desenvolvimento do hook `useOrcamentos` para gravação e recuperação instantânea dos dados via banco de dados Supabase com RLS desativado para testes.
+
+### 📷 Leitura e Scanner Inteligente (Hub de Operações)
+- **Hub Intermediário**: Ao acessar o módulo, a tela se divide entre "Novo Orçamento" e "Ler Orçamento", facilitando a rotina.
+- **Scanner Dedicado (`/orcamento/scan`)**: Rotina de câmera que lê os QR Codes antigos, resgata no banco e lista tudo de forma colorida na tela do celular ou computador.
+- **Modais de Confirmação**: Inseridos modais na ação de "Voltar" (Undo) das telas de impressão para direcionar corretamente a jornada (Nova Leitura vs Novo Orçamento).
+
+### 📊 Múltiplos Formatos de Exportação
+- **Botões Dinâmicos**: Inclusão das ações `CSV`, `XML`, `JSON` e `Excel (XLS)` na tela do scanner do orçamento.
+- **Funções de Conversão Nativas**: Sem dependências pesadas, o sistema gera os pacotes `Blob` e entrega planilhas HTML formatadas e tabelas para cruzamento de dados na própria memória do navegador.
+
 ## [2026-04-26] - Suporte Multi-Câmeras e Resiliência de Hardware
     
 ### 🎥 Sistema de Câmeras Híbrido (USB + Integrada)
