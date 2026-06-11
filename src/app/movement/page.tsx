@@ -54,6 +54,8 @@ import { useMovement } from '@/hooks/use-movement';
 import { useProntuarios } from '@/hooks/use-prontuarios';
 import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
 import { useModelos } from '@/hooks/use-modelos';
+import { useFaturamento } from '@/hooks/use-faturamento';
+import { format } from 'date-fns';
 
 /**
  * Esquema de validação idêntico ao PacienteMobile, adaptado para terminologia Pet
@@ -83,6 +85,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     const { users, isLoaded: usersLoaded } = useUsers();
     const { exams, isLoaded: examsLoaded } = useExams();
     const { modelos, isLoaded: modelosLoaded } = useModelos();
+    const { data: faturamento, fetchFaturamento } = useFaturamento();
     const { toast } = useToast();
     const { user: currentUser } = useSession();
     
@@ -116,6 +119,16 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
     const [isModeloOpen, setIsModeloOpen] = React.useState(false);
     const [showOnlySelected, setShowOnlySelected] = React.useState(false);
+    const [isReportOpen, setIsReportOpen] = React.useState(false);
+    const [reportDateFrom, setReportDateFrom] = React.useState('');
+    const [reportDateTo, setReportDateTo] = React.useState('');
+    const [reportMedicoId, setReportMedicoId] = React.useState('all');
+
+    React.useEffect(() => {
+        if (isReportOpen) {
+            fetchFaturamento();
+        }
+    }, [isReportOpen, fetchFaturamento]);
 
     const petSearchInputRef = React.useRef<HTMLInputElement>(null);
     const vetSelectTriggerRef = React.useRef<HTMLButtonElement>(null);
@@ -168,7 +181,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
 
     const examKits = React.useMemo(() => {
         return modelos.filter(m => 
-            m.tipo === 'Exames' && 
+            ['Exame_Lab', 'Exame_Img'].includes(m.tipo as any) && 
             (!m.medico_id || m.medico_id === selectedVeterinarioId)
         );
     }, [modelos, selectedVeterinarioId]);
@@ -363,7 +376,12 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     return (
         <>
             <PageTitle title="Gerar Guia Veterinária" description="Gere solicitações de exames com QR Code para pets.">
-                <Button variant="outline" onClick={onBack}><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsReportOpen(true)}>
+                        <Printer className="mr-2 h-4 w-4" /> Relatório Guias
+                    </Button>
+                    <Button variant="outline" onClick={onBack}><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button>
+                </div>
             </PageTitle>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-6">
@@ -703,6 +721,96 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Imprimir Relatório de Guias Emitidas</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="flex flex-col gap-2">
+                            <Label>Data Inicial</Label>
+                            <Input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <Label>Data Final</Label>
+                            <Input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)} />
+                        </div>
+                        {isGeralRole && (
+                            <div className="flex flex-col gap-2">
+                                <Label>Médico Veterinário</Label>
+                                <Select value={reportMedicoId} onValueChange={setReportMedicoId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o médico" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos os Médicos</SelectItem>
+                                        {veterinarios.map(v => (
+                                            <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                        <Button onClick={() => {
+                            let filtered = faturamento;
+                            if (currentUser?.status === 'MedicoVet') {
+                                filtered = filtered.filter(f => f.medicovet_id === currentUser.id);
+                            } else if (isGeralRole && reportMedicoId !== 'all') {
+                                filtered = filtered.filter(f => f.medicovet_id === reportMedicoId);
+                            }
+                            if (reportDateFrom) {
+                                filtered = filtered.filter(f => f.data_faturamento && f.data_faturamento.split('T')[0] >= reportDateFrom);
+                            }
+                            if (reportDateTo) {
+                                filtered = filtered.filter(f => f.data_faturamento && f.data_faturamento.split('T')[0] <= reportDateTo);
+                            }
+                            
+                            const groups: Record<string, { codigo: string; data: string; exames: number; valor: number }> = {};
+                            filtered.forEach(f => {
+                                const key = f.movimento_codigo || '-';
+                                if (!groups[key]) groups[key] = { codigo: key, data: f.data_faturamento ? format(new Date(f.data_faturamento), 'dd/MM/yyyy') : '-', exames: 0, valor: 0 };
+                                groups[key].exames += 1;
+                                groups[key].valor += Number(f.preco_aplicado) || 0;
+                            });
+                            
+                            const rows = Object.values(groups).map(g => [
+                                g.codigo,
+                                g.data,
+                                g.exames.toString(),
+                                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(g.valor)
+                            ]);
+
+                            const totalValor = Object.values(groups).reduce((acc, curr) => acc + curr.valor, 0);
+                            rows.push(['', '', 'TOTAL:', new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalValor)]);
+
+                            const filters = [];
+                            if (reportDateFrom || reportDateTo) {
+                                filters.push({ label: 'Período', value: `${reportDateFrom ? format(new Date(reportDateFrom + 'T00:00:00'), 'dd/MM/yyyy') : 'Início'} a ${reportDateTo ? format(new Date(reportDateTo + 'T00:00:00'), 'dd/MM/yyyy') : 'Fim'}` });
+                            }
+                            if (currentUser?.status === 'MedicoVet') {
+                                filters.push({ label: 'Médico', value: `Dr(a). ${currentUser.nome}` });
+                            } else if (isGeralRole && reportMedicoId !== 'all') {
+                                const vetName = veterinarios.find(v => v.id === reportMedicoId)?.nome || 'Desconhecido';
+                                filters.push({ label: 'Médico', value: `Dr(a). ${vetName}` });
+                            }
+
+                            const reportData = {
+                                title: "Relatório de Guias Emitidas",
+                                subtitle: "Resumo de Exames e Valores Faturados por Guia",
+                                filters: filters.length > 0 ? filters : undefined,
+                                headers: ["Cód. Guia", "Data", "Qtd. Exames", "Valor Faturado"],
+                                rows: rows,
+                                backUrl: '/movement?mode=guia'
+                            };
+                            localStorage.setItem('print-report-data', JSON.stringify(reportData));
+                            router.push('/print/report');
+                        }} className="w-full">
+                            <Printer className="mr-2 h-4 w-4" /> Imprimir PDF
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

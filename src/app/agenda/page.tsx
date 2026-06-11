@@ -76,23 +76,12 @@ export default function AgendaPage() {
 
   // State variables
   const [activeTab, setActiveTab] = useState('diaria');
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedStartDate, setSelectedStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedEndDate, setSelectedEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedMedicoId, setSelectedMedicoId] = useState('all');
   const [selectedTipo, setSelectedTipo] = useState('all');
   
-  // Navigation helpers for agenda diária
-  const handlePreviousDay = () => {
-    const date = new Date(selectedDate + 'T12:00:00');
-    date.setDate(date.getDate() - 1);
-    setSelectedDate(format(date, 'yyyy-MM-dd'));
-  };
 
-  const handleNextDay = () => {
-    const date = new Date(selectedDate + 'T12:00:00');
-    date.setDate(date.getDate() + 1);
-    setSelectedDate(format(date, 'yyyy-MM-dd'));
-  };
-  
   // Search patient field in scheduling form
   const [lookupQuery, setLookupQuery] = useState('');
   const [isSearchingPet, setIsSearchingPet] = useState(false);
@@ -131,16 +120,15 @@ export default function AgendaPage() {
 
   // Trigger search on mount and when filters change
   useEffect(() => {
-    // Para a agenda diária, filtramos pelo dia selecionado (das 00:00 às 23:59)
-    const start = `${selectedDate}T00:00:00.000Z`;
-    const end = `${selectedDate}T23:59:59.999Z`;
+    const start = `${selectedStartDate}T00:00:00.000Z`;
+    const end = `${selectedEndDate}T23:59:59.999Z`;
     fetchAgenda({ 
       startDate: start, 
       endDate: end, 
       medicoId: selectedMedicoId,
       tipo: selectedTipo
     });
-  }, [selectedDate, selectedMedicoId, selectedTipo, fetchAgenda]);
+  }, [selectedStartDate, selectedEndDate, selectedMedicoId, selectedTipo, fetchAgenda]);
 
   // Load report data
   const handleLoadReport = () => {
@@ -272,8 +260,8 @@ export default function AgendaPage() {
       setFormTipo('Consulta');
       handleClearLookup();
       // Refresh list
-      const start = `${selectedDate}T00:00:00.000Z`;
-      const end = `${selectedDate}T23:59:59.999Z`;
+      const start = `${selectedStartDate}T00:00:00.000Z`;
+      const end = `${selectedEndDate}T23:59:59.999Z`;
       fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
       setActiveTab('diaria');
     } else {
@@ -420,8 +408,8 @@ export default function AgendaPage() {
       setEditingItem(null);
       
       // Refresh list
-      const start = `${selectedDate}T00:00:00.000Z`;
-      const end = `${selectedDate}T23:59:59.999Z`;
+      const start = `${selectedStartDate}T00:00:00.000Z`;
+      const end = `${selectedEndDate}T23:59:59.999Z`;
       fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
     } else {
       toast({
@@ -476,7 +464,53 @@ export default function AgendaPage() {
 
   // Print report
   const handlePrint = () => {
-    window.print();
+    if (filteredReportAgenda.length === 0) {
+      toast({
+        title: "Sem dados",
+        description: "Não há agendamentos para imprimir.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const headers = ['Data/Hora', 'Tipo', 'Veterinário', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status'];
+    const rows = filteredReportAgenda.map(item => {
+      const dateObj = parseISO(item.dataAgendamento);
+      const dataStr = format(dateObj, 'dd/MM/yyyy HH:mm');
+      return [
+        dataStr,
+        item.tipo || 'Consulta',
+        item.medico?.nome || '-',
+        item.petNome,
+        item.tutorNome,
+        item.tutorCpf,
+        item.tutorTelefone || '-',
+        item.status
+      ];
+    });
+
+    const reportData = {
+      title: "Relatório de Agendamentos",
+      subtitle: "Histórico de agenda do PetMobile",
+      filters: [
+        { label: "Período", value: `${format(parseISO(reportStartDate), 'dd/MM/yyyy')} a ${format(parseISO(reportEndDate), 'dd/MM/yyyy')}` },
+        { label: "Médico", value: reportMedicoId === 'all' ? 'Todos' : veterinarios.find(v => v.id === reportMedicoId)?.nome || reportMedicoId },
+        { label: "Tipo", value: reportTipo === 'all' ? 'Todos' : reportTipo },
+        { label: "Situação", value: reportStatus === 'all' ? 'Todas' : reportStatus }
+      ],
+      headers,
+      rows,
+      kpis: [
+        { label: "Total Agendamentos", value: stats.total },
+        { label: "Atendidos", value: stats.realizados },
+        { label: "Cancelados", value: stats.cancelados },
+        { label: "Pendentes", value: stats.agendados }
+      ],
+      backUrl: '/agenda'
+    };
+
+    localStorage.setItem('print-report-data', JSON.stringify(reportData));
+    router.push('/print/report');
   };
 
   // Print daily agenda PDF
@@ -491,31 +525,26 @@ export default function AgendaPage() {
     }
 
     try {
-      const doc = new jsPDF('p', 'mm', 'a4');
-      
-      const parts = selectedDate.split('-');
-      const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : selectedDate;
+      const formatDataStr = (d: string) => {
+        const parts = d.split('-');
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : d;
+      };
+      const formattedStartDate = formatDataStr(selectedStartDate);
+      const formattedEndDate = formatDataStr(selectedEndDate);
+      const periodoLabel = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} até ${formattedEndDate}`;
 
       const medicoObj = veterinarios.find(v => v.id === selectedMedicoId);
-      const medicoLabel = medicoObj ? medicoObj.nome : 'todos';
-      const tipoLabel = selectedTipo === 'all' ? 'todos' : selectedTipo;
+      const medicoLabel = medicoObj ? medicoObj.nome : 'Todos';
+      const tipoLabel = selectedTipo === 'all' ? 'Todos' : selectedTipo;
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.text(`Agenda do Dia - ${formattedDate}`, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.text(`- Medico:  Selecionado ${medicoLabel}   |   Tipo: ${tipoLabel}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
-
-      const headers = [['Hora', 'Tipo', 'Nome do Pet', 'CPF Tutor', 'Nome Tutor', 'Médico', 'Situação', 'Ações']];
+      const headers = ['Hora', 'Tipo', 'Nome do Pet', 'CPF Tutor', 'Nome Tutor', 'Médico', 'Situação'];
 
       const rows = agenda.map(item => {
         const horaStr = format(parseISO(item.dataAgendamento), 'HH:mm');
         const isNewPet = !item.petId;
-        const petCell = `${item.petNome}\n${isNewPet ? 'Novo Paciente' : `Cadastrado (${item.pet?.codPet || ''})`}`;
-        const tutorCell = `${item.tutorNome}${item.tutorTelefone ? `\n${item.tutorTelefone}` : ''}`;
-        const medicoCell = `${item.medico?.nome || 'Não Vinculado'}${item.medico?.crmv_uf ? `\nCRMV: ${item.medico.crmv_uf}` : ''}`;
+        const petCell = `${item.petNome} ${isNewPet ? '(Novo Paciente)' : `(${item.pet?.codPet || ''})`}`;
+        const tutorCell = `${item.tutorNome} ${item.tutorTelefone ? `(${item.tutorTelefone})` : ''}`;
+        const medicoCell = `${item.medico?.nome || 'Não Vinculado'} ${item.medico?.crmv_uf ? `(CRMV: ${item.medico.crmv_uf})` : ''}`;
         
         return [
           horaStr,
@@ -524,52 +553,27 @@ export default function AgendaPage() {
           item.tutorCpf || '',
           tutorCell,
           medicoCell,
-          item.status || '',
-          ''
+          item.status || ''
         ];
       });
 
-      autoTable(doc, {
-        head: headers,
-        body: rows,
-        startY: 35,
-        styles: { 
-          fontSize: 9,
-          cellPadding: 3,
-          valign: 'middle',
-          font: 'helvetica'
-        },
-        headStyles: { 
-          fillColor: [37, 99, 235],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252]
-        },
-        columnStyles: {
-          0: { cellWidth: 15 },
-          1: { cellWidth: 20 },
-          2: { cellWidth: 30 },
-          3: { cellWidth: 25 },
-          4: { cellWidth: 30 },
-          5: { cellWidth: 30 },
-          6: { cellWidth: 20 },
-          7: { cellWidth: 10 }
-        }
-      });
+      const reportData = {
+        title: `Agenda de Consultas`,
+        subtitle: `Controle de agendamentos - ${periodoLabel}`,
+        filters: [
+          { label: "Período", value: periodoLabel },
+          { label: "Médico", value: medicoLabel },
+          { label: "Tipo", value: tipoLabel }
+        ],
+        headers,
+        rows,
+        backUrl: '/agenda'
+      };
 
-      // Generate blob URL to preview/print in a new tab
-      const pdfBlob = doc.output('blob');
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      window.open(blobUrl, '_blank');
-      
-      toast({
-        title: "Visualização do PDF aberta",
-        description: "O PDF da agenda foi aberto em uma nova guia para visualização e impressão."
-      });
+      localStorage.setItem('print-report-data', JSON.stringify(reportData));
+      router.push('/print/report');
     } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
+      console.error("Erro ao gerar Relatório:", error);
       toast({
         title: "Erro ao gerar PDF",
         description: "Não foi possível gerar o arquivo PDF.",
@@ -640,7 +644,7 @@ export default function AgendaPage() {
         <TabsList className="grid w-full grid-cols-3 md:w-[600px] mb-6">
           <TabsTrigger value="diaria">
             <CalendarDays className="w-4 h-4 mr-2" />
-            Agenda Diária
+            Visualizar Agenda
           </TabsTrigger>
           <TabsTrigger value="novo">
             <Plus className="w-4 h-4 mr-2" />
@@ -659,35 +663,24 @@ export default function AgendaPage() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <CardTitle>Filtros da Agenda</CardTitle>
-                  <CardDescription>Escolha a data e o veterinário para visualizar as consultas programadas.</CardDescription>
+                  <CardDescription>Escolha o período e o veterinário para visualizar as consultas programadas.</CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium mr-1">Data:</span>
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="h-9 w-9 shrink-0" 
-                      onClick={handlePreviousDay}
-                      title="Dia Anterior"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
+                    <span className="text-sm font-medium mr-1">Período:</span>
                     <Input 
                       type="date" 
-                      value={selectedDate} 
-                      onChange={(e) => setSelectedDate(e.target.value)}
+                      value={selectedStartDate} 
+                      onChange={(e) => setSelectedStartDate(e.target.value)}
                       className="w-[140px] h-9 shadow-sm"
                     />
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="h-9 w-9 shrink-0" 
-                      onClick={handleNextDay}
-                      title="Próximo Dia"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <span className="text-sm text-muted-foreground">até</span>
+                    <Input 
+                      type="date" 
+                      value={selectedEndDate} 
+                      onChange={(e) => setSelectedEndDate(e.target.value)}
+                      className="w-[140px] h-9 shadow-sm"
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Médico:</span>
@@ -724,7 +717,7 @@ export default function AgendaPage() {
                     onClick={handlePrintDailyAgendaPDF}
                   >
                     <Printer className="w-4 h-4" />
-                    Imprimir PDF da Agenda do Dia
+                    Imprimir PDF da Agenda
                   </Button>
                 </div>
               </div>
@@ -869,8 +862,8 @@ export default function AgendaPage() {
                                           if (res.success) {
                                             toast({ title: "Cancelado", description: "Agendamento cancelado com sucesso." });
                                             fetchAgenda({ 
-                                              startDate: `${selectedDate}T00:00:00.000Z`, 
-                                              endDate: `${selectedDate}T23:59:59.999Z`, 
+                                              startDate: `${selectedStartDate}T00:00:00.000Z`, 
+                                              endDate: `${selectedEndDate}T23:59:59.999Z`, 
                                               medicoId: selectedMedicoId,
                                               tipo: selectedTipo
                                             });
@@ -937,8 +930,8 @@ export default function AgendaPage() {
                                           if (res.success) {
                                             toast({ title: "Excluído", description: "Agendamento removido." });
                                             fetchAgenda({ 
-                                              startDate: `${selectedDate}T00:00:00.000Z`, 
-                                              endDate: `${selectedDate}T23:59:59.999Z`, 
+                                              startDate: `${selectedStartDate}T00:00:00.000Z`, 
+                                              endDate: `${selectedEndDate}T23:59:59.999Z`, 
                                               medicoId: selectedMedicoId,
                                               tipo: selectedTipo
                                             });

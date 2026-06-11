@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -490,12 +490,27 @@ function PetForm({
 }
 
 function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: boolean, onEdit: (pet: Pet) => void, onDelete: (id: string) => void }) {
+  const router = useRouter();
   const [sortConfig, setSortConfig] = React.useState<{key: keyof Pet, direction: 'asc' | 'desc'} | null>(null);
+  const [selectedPlanFilter, setSelectedPlanFilter] = React.useState('all');
+  const [selectedEspecieFilter, setSelectedEspecieFilter] = React.useState('all');
+
+  const uniquePlanos = React.useMemo(() => Array.from(new Set(pets.map(p => p.healthPlanName || 'Particular'))).sort(), [pets]);
+  const uniqueEspecies = React.useMemo(() => Array.from(new Set(pets.map(p => p.especie || 'Outro'))).sort(), [pets]);
 
   const sortedPets = React.useMemo(() => {
-    let sortableItems = [...pets];
+    let filteredItems = pets.filter(p => {
+      const plano = p.healthPlanName || 'Particular';
+      if (selectedPlanFilter !== 'all' && plano !== selectedPlanFilter) return false;
+      
+      const esp = p.especie || 'Outro';
+      if (selectedEspecieFilter !== 'all' && esp !== selectedEspecieFilter) return false;
+      
+      return true;
+    });
+
     if (sortConfig !== null) {
-      sortableItems.sort((a, b) => {
+      filteredItems.sort((a, b) => {
         const valA = String(a[sortConfig.key] ?? '');
         const valB = String(b[sortConfig.key] ?? '');
         return sortConfig.direction === 'asc' 
@@ -503,8 +518,8 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
           : valB.localeCompare(valA);
       });
     }
-    return sortableItems;
-  }, [pets, sortConfig]);
+    return filteredItems;
+  }, [pets, sortConfig, selectedPlanFilter, selectedEspecieFilter]);
 
   const requestSort = (key: keyof Pet) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -527,62 +542,124 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-col space-y-4 xl:flex-row xl:items-center xl:justify-between xl:space-y-0">
         <div>
           <CardTitle>Pets Cadastrados</CardTitle>
           <CardDescription>Visualize e gerencie todos os animais registrados na clínica.</CardDescription>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => {
-            const exportData = pets.map(p => ({
-              'Nome_Pet': p.nome,
-              'Especie': p.especie,
-              'Raca': p.raca || '',
-              'Sexo_MF': p.sexo,
-              'Data_Nascimento': p.dataNascimento || '',
-              'Tutor_Nome': p.tutorNome,
-              'Tutor_CPF': p.tutorCpf,
-              'Tutor_Email': p.tutorEmail || '',
-              'Tutor_Telefone': p.tutorTelefone || '',
-              'CEP': p.tutorCep || '',
-              'Endereco': p.tutorEndereco || '',
-              'Bairro': p.tutorBairro || '',
-              'Cidade': p.tutorCidade || '',
-              'UF': p.tutorUf || '',
-              'Codigo_Plano': p.healthPlanCode || '',
-              'Matricula_Plano': p.matricula || '',
-              'Codigo_Pet_Antigo': p.codPet || ''
-            }));
-            
-            // If list is empty, export a header-only template
-            const dataToExport = exportData.length > 0 ? exportData : [{
-              'Nome_Pet': 'Ex: Bidu',
-              'Especie': 'Cão',
-              'Raca': 'Vira-lata',
-              'Sexo_MF': 'M',
-              'Data_Nascimento': '2020-01-01',
-              'Tutor_Nome': 'João Silva',
-              'Tutor_CPF': '000.000.000-00',
-              'Tutor_Email': 'joao@email.com',
-              'Tutor_Telefone': '(00) 00000-0000',
-              'CEP': '00000-000',
-              'Endereco': 'Rua Exemplo, 123',
-              'Bairro': 'Centro',
-              'Cidade': 'São Paulo',
-              'UF': 'SP',
-              'Codigo_Plano': '',
-              'Matricula_Plano': '',
-              'Codigo_Pet_Antigo': ''
-            }];
-            
-            exportToCSV('modelo_importacao_pets', dataToExport);
-          }}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Exportar CSV (Modelo)
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={selectedPlanFilter} onValueChange={setSelectedPlanFilter}>
+            <SelectTrigger className="w-[160px] h-9">
+              <SelectValue placeholder="Todos os Planos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Planos</SelectItem>
+              {uniquePlanos.map(plano => (
+                <SelectItem key={plano} value={plano}>{plano}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedEspecieFilter} onValueChange={setSelectedEspecieFilter}>
+            <SelectTrigger className="w-[160px] h-9">
+              <SelectValue placeholder="Todas Espécies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas Espécies</SelectItem>
+              {uniqueEspecies.map(esp => (
+                <SelectItem key={esp} value={esp}>{esp}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 border-l pl-2 ml-1">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+              const headers = ['Código', 'Nome', 'Espécie/Raça', 'Tutor', 'CPF Tutor', 'Plano'];
+              const rows = sortedPets.map(pet => [
+                  pet.codPet || '',
+                  pet.nome || '',
+                  `${pet.especie}${pet.raca ? ` / ${pet.raca}` : ''}`,
+                  pet.tutorNome || '',
+                  pet.tutorCpf || '',
+                  pet.healthPlanName || 'Particular'
+              ]);
+
+              const filters = [];
+              if (selectedPlanFilter !== 'all') filters.push({ label: 'Plano', value: selectedPlanFilter });
+              if (selectedEspecieFilter !== 'all') filters.push({ label: 'Espécie', value: selectedEspecieFilter });
+
+              const reportData = {
+                  title: "Lista de Pets",
+                  subtitle: `Total de registros: ${sortedPets.length}`,
+                  filters: filters.length > 0 ? filters : undefined,
+                  headers,
+                  rows,
+                  backUrl: '/pets'
+              };
+              localStorage.setItem('print-report-data', JSON.stringify(reportData));
+              router.push('/print/report');
+            }}
+            className="border-primary/20 text-primary hover:bg-primary/5"
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir PDF
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              const exportData = sortedPets.map(p => ({
+                'Nome_Pet': p.nome,
+                'Especie': p.especie,
+                'Raca': p.raca || '',
+                'Sexo_MF': p.sexo,
+                'Data_Nascimento': p.dataNascimento || '',
+                'Tutor_Nome': p.tutorNome,
+                'Tutor_CPF': p.tutorCpf,
+                'Tutor_Email': p.tutorEmail || '',
+                'Tutor_Telefone': p.tutorTelefone || '',
+                'CEP': p.tutorCep || '',
+                'Endereco': p.tutorEndereco || '',
+                'Bairro': p.tutorBairro || '',
+                'Cidade': p.tutorCidade || '',
+                'UF': p.tutorUf || '',
+                'Codigo_Plano': p.healthPlanCode || '',
+                'Matricula_Plano': p.matricula || '',
+                'Codigo_Pet_Antigo': p.codPet || ''
+              }));
+              
+              // If list is empty, export a header-only template
+              const dataToExport = exportData.length > 0 ? exportData : [{
+                'Nome_Pet': 'Ex: Bidu',
+                'Especie': 'Cão',
+                'Raca': 'Vira-lata',
+                'Sexo_MF': 'M',
+                'Data_Nascimento': '2020-01-01',
+                'Tutor_Nome': 'João Silva',
+                'Tutor_CPF': '000.000.000-00',
+                'Tutor_Email': 'joao@email.com',
+                'Tutor_Telefone': '(00) 00000-0000',
+                'CEP': '00000-000',
+                'Endereco': 'Rua Exemplo, 123',
+                'Bairro': 'Centro',
+                'Cidade': 'São Paulo',
+                'UF': 'SP',
+                'Codigo_Plano': '',
+                'Matricula_Plano': '',
+                'Codigo_Pet_Antigo': ''
+              }];
+              
+              exportToCSV('modelo_importacao_pets', dataToExport);
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {sortedPets.length > 0 ? (

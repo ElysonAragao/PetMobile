@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from 'react';
-import { Plus, Search, FileText, Trash2, Edit2, Star, Save, Filter } from 'lucide-react';
+import { Plus, Search, FileText, Trash2, Edit2, Star, Save, Filter, Printer } from 'lucide-react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { useRouter } from 'next/navigation';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const modeloSchema = z.object({
   nome: z.string().min(1, "Nome é obrigatório"),
-  tipo: z.enum(['Exames', 'Receita', 'Atestado', 'Laudo', 'Encaminhamento', 'Outros']),
+  tipo: z.enum(['Exame_Lab', 'Exame_Img', 'Atestado', 'Laudo', 'Encaminhamento/Internação', 'Outros']),
   conteudo: z.string().min(1, "Conteúdo é obrigatório"),
   is_favorite: z.boolean().default(false),
   medico_id: z.string().optional().nullable(),
@@ -45,8 +46,10 @@ export function ModelosManager() {
   
   const [searchTerm, setSearchTerm] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string>("all");
+  const [medicoFilter, setMedicoFilter] = React.useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [editingModelo, setEditingModelo] = React.useState<Modelo | null>(null);
+  const router = useRouter();
 
   // States for Exam selection mode
   const [examSearch, setExamSearch] = React.useState("");
@@ -56,7 +59,7 @@ export function ModelosManager() {
     resolver: zodResolver(modeloSchema),
     defaultValues: {
       nome: "",
-      tipo: "Exames",
+      tipo: "Exame_Lab",
       conteudo: "",
       is_favorite: false,
       medico_id: "global",
@@ -82,9 +85,9 @@ export function ModelosManager() {
     return [...selected, ...unselected];
   }, [exams, examSearch, selectedExamIds]);
 
-  // Update conteudo when selectedExamIds change (only if tipo is Exames)
+  // Update conteudo when selectedExamIds change (only if tipo is Exame_Lab or Exame_Img)
   React.useEffect(() => {
-    if (selectedTipo === 'Exames') {
+    if (['Exame_Lab', 'Exame_Img'].includes(selectedTipo)) {
       const selectedExams = exams.filter(e => selectedExamIds.includes(e.id));
       const content = selectedExams.map(e => e.idExame || e.examCode).join('\n');
       form.setValue('conteudo', content || ' '); // Set space to pass validation if empty but we want validation to fail if truly empty
@@ -93,12 +96,23 @@ export function ModelosManager() {
 
   const filteredModelos = React.useMemo(() => {
     return modelos.filter(m => {
+      // Role-based visibility
+      if (!isGeralRole && m.medico_id && m.medico_id !== 'global' && m.medico_id !== user?.id) {
+        return false;
+      }
+
+      // Medico filter (for admins)
+      if (isGeralRole && medicoFilter !== 'all') {
+        const mId = m.medico_id || 'global';
+        if (mId !== medicoFilter) return false;
+      }
+
       const matchesSearch = m.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              m.conteudo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesType = typeFilter === "all" || m.tipo === typeFilter;
       return matchesSearch && matchesType;
     });
-  }, [modelos, searchTerm, typeFilter]);
+  }, [modelos, searchTerm, typeFilter, isGeralRole, medicoFilter, user]);
 
   const onSubmit = async (values: ModeloFormValues) => {
     if (!selectedEmpresaId || !user) return;
@@ -146,7 +160,7 @@ export function ModelosManager() {
       medico_id: modelo.medico_id || 'global',
     });
 
-    if (modelo.tipo === 'Exames') {
+    if (['Exame_Lab', 'Exame_Img'].includes(modelo.tipo as any)) {
       const lines = modelo.conteudo.split('\n').map(l => l.trim()).filter(Boolean);
       const ids = exams.filter(e => 
         lines.includes(e.idExame || '') || 
@@ -186,9 +200,35 @@ export function ModelosManager() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Gerenciar Modelos</h3>
-        <Button onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> Novo Modelo
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => {
+            const filters = [];
+            if (typeFilter !== 'all') filters.push({ label: 'Tipo', value: typeFilter });
+            if (isGeralRole && medicoFilter !== 'all') {
+              const medName = medicoFilter === 'global' ? 'Global (Todos)' : veterinarios.find(v => v.id === medicoFilter)?.nome || 'Desconhecido';
+              filters.push({ label: 'Médico', value: medName });
+            }
+
+            const reportData = {
+              title: "Modelos e Templates do Corpo Clínico",
+              subtitle: "Lista de documentos, atestados e receitas salvas",
+              filters: filters.length > 0 ? filters : undefined,
+              headers: ["Nome do Médico", "Tipo de Modelo", "Nome do Modelo"],
+              rows: filteredModelos.map(m => {
+                const medicoNome = m.medico_id === 'global' || !m.medico_id ? 'Global (Todos)' : veterinarios.find(v => v.id === m.medico_id)?.nome || 'Desconhecido';
+                return [medicoNome, m.tipo, m.nome];
+              }),
+              backUrl: '/veterinarios?tab=modelos'
+            };
+            localStorage.setItem('print-report-data', JSON.stringify(reportData));
+            router.push('/print/report');
+          }}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimir PDF
+          </Button>
+          <Button onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> Novo Modelo
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-muted/30 p-4 rounded-lg border">
@@ -201,7 +241,23 @@ export function ModelosManager() {
             className="pl-10"
           />
         </div>
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {isGeralRole && (
+            <Select value={medicoFilter} onValueChange={setMedicoFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Médico" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Médicos</SelectItem>
+                <SelectItem value="global">Global (Todos)</SelectItem>
+                {veterinarios.map(v => (
+                  <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-[180px]">
               <Filter className="mr-2 h-4 w-4" />
@@ -209,11 +265,11 @@ export function ModelosManager() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
-              <SelectItem value="Exames">Exames</SelectItem>
-              <SelectItem value="Receita">Receita</SelectItem>
+              <SelectItem value="Exame_Lab">Exame_Lab</SelectItem>
+              <SelectItem value="Exame_Img">Exame_Img</SelectItem>
               <SelectItem value="Atestado">Atestado</SelectItem>
               <SelectItem value="Laudo">Laudo</SelectItem>
-              <SelectItem value="Encaminhamento">Encaminhamento</SelectItem>
+              <SelectItem value="Encaminhamento/Internação">Encaminhamento/Internação</SelectItem>
               <SelectItem value="Outros">Outros</SelectItem>
             </SelectContent>
           </Select>
@@ -225,14 +281,22 @@ export function ModelosManager() {
           <Card key={modelo.id} className={`group relative transition-all hover:shadow-md ${modelo.is_favorite ? 'border-primary/40 bg-primary/5' : ''}`}>
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
-                <Badge variant={
-                  modelo.tipo === 'Exames' ? 'default' :
-                  modelo.tipo === 'Receita' ? 'secondary' :
-                  modelo.tipo === 'Atestado' ? 'outline' : 
-                  modelo.tipo === 'Encaminhamento' ? 'destructive' : 'secondary'
-                }>
-                  {modelo.tipo}
-                </Badge>
+                <div className="flex flex-col items-start gap-1.5">
+                  <Badge variant={
+                    ['Exame_Lab', 'Exame_Img'].includes(modelo.tipo) ? 'default' :
+                    modelo.tipo === 'Atestado' ? 'secondary' :
+                    modelo.tipo === 'Encaminhamento/Internação' ? 'destructive' : 'secondary'
+                  }>
+                    {modelo.tipo}
+                  </Badge>
+                  {isGeralRole && (
+                    <span className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-sm">
+                      {modelo.medico_id === 'global' || !modelo.medico_id 
+                        ? 'GLOBAL (Todos)' 
+                        : veterinarios.find(v => v.id === modelo.medico_id)?.nome || 'MÉDICO DESCONHECIDO'}
+                    </span>
+                  )}
+                </div>
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -276,7 +340,7 @@ export function ModelosManager() {
             <DialogHeader>
               <DialogTitle>{editingModelo ? 'Editar Modelo' : 'Novo Modelo'}</DialogTitle>
               <DialogDescription>
-                {selectedTipo === 'Exames' 
+                {['Exame_Lab', 'Exame_Img'].includes(selectedTipo)
                   ? 'Selecione os exames que compõem este kit favorito.' 
                   : 'Crie um modelo reutilizável de texto para seus atendimentos.'}
               </DialogDescription>
@@ -336,10 +400,9 @@ export function ModelosManager() {
                       <Select 
                         onValueChange={(val: any) => {
                           field.onChange(val);
-                          if (val === 'Exames') {
+                          if (['Exame_Lab', 'Exame_Img'].includes(val)) {
                             setSelectedExamIds([]);
                           } else if (!form.getValues('conteudo') || form.getValues('conteudo').trim() === '') {
-                            if (val === 'Receita') form.setValue('conteudo', 'MEDICAMENTO:\nUSO:\nORIENTAÇÕES:');
                             if (val === 'Atestado') form.setValue('conteudo', 'Atesto para os devidos fins que o paciente foi atendido nesta data...');
                           }
                         }} 
@@ -351,11 +414,11 @@ export function ModelosManager() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Exames">Exames (Kit Favoritos)</SelectItem>
-                          <SelectItem value="Receita">Receita</SelectItem>
+                          <SelectItem value="Exame_Lab">Exame_Lab</SelectItem>
+                          <SelectItem value="Exame_Img">Exame_Img</SelectItem>
                           <SelectItem value="Atestado">Atestado</SelectItem>
                           <SelectItem value="Laudo">Laudo</SelectItem>
-                          <SelectItem value="Encaminhamento">Encaminhamento / Internação</SelectItem>
+                          <SelectItem value="Encaminhamento/Internação">Encaminhamento / Internação</SelectItem>
                           <SelectItem value="Outros">Outros</SelectItem>
                         </SelectContent>
                       </Select>
@@ -365,7 +428,7 @@ export function ModelosManager() {
                 />
               </div>
 
-              {selectedTipo === 'Exames' ? (
+              {['Exame_Lab', 'Exame_Img'].includes(selectedTipo) ? (
                 <div className="space-y-4 border p-4 rounded-lg bg-muted/20">
                   <div className="flex items-center justify-between">
                     <FormLabel className="text-base">Selecionar Exames do Kit</FormLabel>

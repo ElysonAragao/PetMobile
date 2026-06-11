@@ -89,7 +89,7 @@ export interface Modelo {
   empresa_id: string;
   medico_id?: string | null; // Null means global for the company
   nome: string;
-  tipo: 'Exames' | 'Receita' | 'Atestado' | 'Laudo' | 'Encaminhamento' | 'Outros';
+  tipo: 'Exame_Lab' | 'Exame_Img' | 'Atestado' | 'Laudo' | 'Encaminhamento/Internação' | 'Outros';
   conteudo: string; // The text content or JSON with exam list
   is_favorite?: boolean;
   created_at?: string;
@@ -162,5 +162,18 @@ export interface AgendaItem {
   // Join objects
   medico?: { nome: string; crmv_uf?: string };
   pet?: { nome: string; codPet?: string };
+}
+
+export interface Material {
+  id: string;
+  empresaId: string;
+  codigo: string;
+  idMaterial?: string;
+  descricao: string;
+  categoria: string;
+  precoUnitario: number;
+  unidade: string;
+  estoque: number;
+  createdAt?: string;
 }
 

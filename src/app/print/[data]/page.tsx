@@ -72,7 +72,8 @@ function PrintContent() {
                     tutorCpf: petRow.tutor_cpf,
                     tutorTelefone: petRow.tutor_telefone,
                     codPet: petRow.cod_pet,
-                    healthPlanName: petRow.health_plan_name
+                    healthPlanName: petRow.health_plan_name,
+                    healthPlanCode: petRow.health_plan_code
                 } : null;
 
                 const fullData = {
@@ -182,6 +183,12 @@ function PrintContent() {
                     </>
                 )}
             </section>
+            {(guia.pet?.healthPlanName || guia.pet?.healthPlanCode) && (
+                <section className="mb-2 border-b-2 border-black pb-2 text-sm font-bold flex justify-between items-center bg-gray-50 px-2 py-1">
+                    <div>Plano de Saúde: <span className="text-primary">{guia.pet.healthPlanName || 'Não Informado'}</span></div>
+                    {guia.pet.healthPlanCode && <div>ID Plano: <span className="text-primary">{guia.pet.healthPlanCode}</span></div>}
+                </section>
+            )}
 
             <section className="mb-4 text-[10.5pt] border-y border-black py-1 px-0 space-y-1">
                 <div className="space-y-0.5">

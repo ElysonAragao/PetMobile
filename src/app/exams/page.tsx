@@ -4,8 +4,9 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FileText, FileX, PlusCircle, Trash2, Edit, ArrowUpDown, Beaker, Scan, AlertTriangle, Undo2, Upload, DollarSign, CheckCircle2, Info, Download } from 'lucide-react';
+import { FileText, FileX, PlusCircle, Trash2, Edit, ArrowUpDown, Beaker, Scan, AlertTriangle, Undo2, Upload, DollarSign, CheckCircle2, Info, Download, Printer } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { Exam, HealthPlan } from '@/lib/types';
 import { useExams, ExamFormValues } from '@/hooks/use-exams';
@@ -69,11 +70,16 @@ type SortConfig = {
 
 function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoaded: boolean, onEdit: (exam: Exam) => void, onDelete: (id: string) => void }) {
   const [sortConfig, setSortConfig] = React.useState<SortConfig | null>(null);
+  const [selectedTypeFilter, setSelectedTypeFilter] = React.useState<string>("all");
 
   const sortedExams = React.useMemo(() => {
-    let sortableItems = [...exams];
+    let filteredItems = exams.filter(ex => {
+      if (selectedTypeFilter !== "all" && ex.type !== selectedTypeFilter) return false;
+      return true;
+    });
+
     if (sortConfig !== null && sortConfig.key) {
-      sortableItems.sort((a, b) => {
+      filteredItems.sort((a, b) => {
         const valA = a[sortConfig.key];
         const valB = b[sortConfig.key];
 
@@ -88,8 +94,8 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
         return 0;
       });
     }
-    return sortableItems;
-  }, [exams, sortConfig]);
+    return filteredItems;
+  }, [exams, sortConfig, selectedTypeFilter]);
 
   const requestSort = (key: keyof Exam) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -116,11 +122,52 @@ function ExamList({ exams, isLoaded, onEdit, onDelete }: { exams: Exam[], isLoad
     );
   }
 
+  const router = useRouter();
+
+  const handlePrint = () => {
+    const filters = [];
+    if (selectedTypeFilter !== 'all') filters.push({ label: 'Tipo', value: selectedTypeFilter });
+
+    const reportData = {
+      title: "Relação de Exames Cadastrados",
+      subtitle: "Catálogo de exames do PetMobile",
+      filters: filters.length > 0 ? filters : undefined,
+      headers: ["Código", "Tipo", "Nome", "ID-Exame", "Urgente"],
+      rows: sortedExams.map(ex => [
+        ex.examCode,
+        ex.type,
+        ex.name,
+        ex.idExame || ex.examCode,
+        ex.isUrgency ? "Sim" : "Não"
+      ]),
+      backUrl: '/exams'
+    };
+    localStorage.setItem('print-report-data', JSON.stringify(reportData));
+    router.push('/print/report');
+  };
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Exames Cadastrados</CardTitle>
-        <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
+      <CardHeader className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div>
+          <CardTitle>Exames Cadastrados</CardTitle>
+          <CardDescription>Visualize e gerencie todos os exames disponíveis.</CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}>
+            <SelectTrigger className="w-[160px] h-9">
+              <SelectValue placeholder="Tipo de Exame" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Tipos</SelectItem>
+              <SelectItem value="Laboratório">Laboratório</SelectItem>
+              <SelectItem value="Imagem">Imagem</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={handlePrint} className="border-primary/20 text-primary hover:bg-primary/5">
+            <Printer className="mr-2 h-4 w-4" /> Imprimir PDF
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {sortedExams.length > 0 ? (
@@ -406,17 +453,23 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
     const { toast } = useToast();
     const { selectedEmpresaId } = useSession();
     const [selectedPlanId, setSelectedPlanId] = React.useState<string>("sem_plano");
+    const [selectedTypeFilter, setSelectedTypeFilter] = React.useState<string>("all");
     const [bulkPrices, setBulkPrices] = React.useState<Record<string, string>>({});
     const [bulkPricesUrgencia, setBulkPricesUrgencia] = React.useState<Record<string, string>>({});
     const [hasChanges, setHasChanges] = React.useState(false);
     const [isImportingPrices, setIsImportingPrices] = React.useState(false);
     const priceInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
     const csvPriceInputRef = React.useRef<HTMLInputElement>(null);
+    const router = useRouter();
 
     const filteredExams = React.useMemo(() => {
       if (selectedPlanId === "sem_plano") return [];
-      return examsList; // Catálogo unificado: exibe todos os exames
-    }, [examsList, selectedPlanId]);
+      let filtered = examsList;
+      if (selectedTypeFilter !== "all") {
+        filtered = filtered.filter(ex => ex.type === selectedTypeFilter);
+      }
+      return filtered;
+    }, [examsList, selectedPlanId, selectedTypeFilter]);
 
     // When a plan is selected, fetch prices and auto-enter edit mode
     React.useEffect(() => {
@@ -721,17 +774,54 @@ function ExamPrices({ examsList, plansList }: { examsList: Exam[], plansList: He
                 <CheckCircle2 className="mr-2 h-4 w-4" /> {isLoading ? 'Salvando...' : 'Confirmar Preços'}
               </Button>
             )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              disabled={selectedPlanId === "sem_plano" || filteredExams.length === 0}
+              onClick={() => {
+                const planName = plansList.find(p => p.id === selectedPlanId)?.nome || 'Plano';
+                const reportData = {
+                  title: `Tabela de Preços - ${planName}`,
+                  subtitle: `Exames e Procedimentos - ${selectedTypeFilter === 'all' ? 'Todos os Tipos' : selectedTypeFilter}`,
+                  headers: ["Cód.", "ID-Exame", "Exame", "Tipo", "Urgente", "Preço Normal", "Preço Urgência"],
+                  rows: filteredExams.map(ex => {
+                    const price = formatCurrency(bulkPrices[ex.id] ? parseFloat(bulkPrices[ex.id].replace(',', '.')) : null);
+                    const priceUrg = formatCurrency(bulkPricesUrgencia[ex.id] ? parseFloat(bulkPricesUrgencia[ex.id].replace(',', '.')) : null);
+                    return [ex.examCode, ex.idExame || '-', ex.name, ex.type, ex.isUrgency ? 'Sim' : 'Não', price, priceUrg];
+                  }),
+                  backUrl: '/exams'
+                };
+                localStorage.setItem('print-report-data', JSON.stringify(reportData));
+                router.push('/print/report');
+              }}
+            >
+              <Printer className="mr-2 h-4 w-4" /> Imprimir PDF
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="max-w-sm">
-            <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-              <SelectTrigger><SelectValue placeholder="Selecione o Plano" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sem_plano">Selecione um Plano...</SelectItem>
-                {plansList.map(hp => <SelectItem key={hp.id} value={hp.id}>{hp.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-4 flex-wrap">
+            <div className="w-[250px]">
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger><SelectValue placeholder="Selecione o Plano" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sem_plano">Selecione um Plano...</SelectItem>
+                  {plansList.map(hp => <SelectItem key={hp.id} value={hp.id}>{hp.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedPlanId !== "sem_plano" && (
+              <div className="w-[200px]">
+                <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}>
+                  <SelectTrigger><SelectValue placeholder="Filtrar por Tipo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Tipos</SelectItem>
+                    <SelectItem value="Laboratório">Laboratório</SelectItem>
+                    <SelectItem value="Imagem">Imagem</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {selectedPlanId !== "sem_plano" ? (

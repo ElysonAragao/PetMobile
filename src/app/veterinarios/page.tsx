@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload, Download, FileText, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, ArrowUpDown, UserX, Stethoscope, Undo2, Upload, Download, FileText, CheckCircle2, XCircle, Clock, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 
@@ -76,6 +76,7 @@ function isDateExpired(dateStr?: string | null): boolean {
 }
 
 function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterinarios: Veterinario[], isLoaded: boolean, onEdit: (vet: Veterinario) => void, onDelete: (id: string) => void }) {
+  const router = useRouter();
   const [sortConfig, setSortConfig] = React.useState<{key: keyof Veterinario, direction: 'asc' | 'desc'} | null>(null);
 
   const sortedVets = React.useMemo(() => {
@@ -133,6 +134,7 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
           <CardTitle>Médicos Veterinários Cadastrados</CardTitle>
           <CardDescription>Gerencie o corpo clínico da sua clínica pet.</CardDescription>
         </div>
+        <div className="flex gap-2">
         <Button 
           variant="outline" 
           size="sm" 
@@ -159,6 +161,34 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
           <Download className="mr-2 h-4 w-4" />
           Exportar CSV (Modelo)
         </Button>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const reportData = {
+              title: "Relação do Corpo Clínico",
+              subtitle: "Lista de médicos veterinários cadastrados",
+              headers: ["Código", "Nome", "CRMV", "Especialidade", "E-mail", "Telefone", "Validade Acesso", "Prontuário"],
+              rows: sortedVets.map(v => [
+                v.codVet,
+                v.nome,
+                v.crmv,
+                v.especialidade || 'Geral',
+                v.email || '-',
+                v.telefone || '-',
+                v.validade_acesso ? formatDate(v.validade_acesso) : '-',
+                !v.prontuario_liberado ? 'Não' : (v.validade_prontuario ? (isDateExpired(v.validade_prontuario) ? `Expirado (${formatDate(v.validade_prontuario)})` : formatDate(v.validade_prontuario)) : 'Indeterminado')
+              ]),
+              backUrl: '/veterinarios'
+            };
+            localStorage.setItem('print-report-data', JSON.stringify(reportData));
+            router.push('/print/report');
+          }}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Imprimir PDF
+        </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {sortedVets.length > 0 ? (
@@ -220,7 +250,8 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
 
 export default function VeterinariosPage() {
   const { veterinarios, addVeterinario, updateVeterinario, deleteVeterinario, isLoaded, error, getNextVeterinarioCode } = useVeterinarios();
-  const [activeTab, setActiveTab] = React.useState("list");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = React.useState(searchParams.get("tab") || "list");
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedVet, setSelectedVet] = React.useState<Veterinario | null>(null);
   const { toast } = useToast();

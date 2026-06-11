@@ -5,8 +5,9 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HeartPulse, PlusCircle, Trash2, Edit, ArrowUpDown, FileX, Undo2, Download } from 'lucide-react';
+import { HeartPulse, PlusCircle, Trash2, Edit, ArrowUpDown, FileX, Undo2, Download, Printer } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { HealthPlan } from '@/lib/types';
 import { useHealthPlans, HealthPlanFormValues } from '@/hooks/use-health-plans';
@@ -58,6 +59,7 @@ type SortConfig = {
 };
 
 function HealthPlanList({ plans, isLoaded, onEdit, onDelete }: { plans: HealthPlan[], isLoaded: boolean, onEdit: (plan: HealthPlan) => void, onDelete: (id: string) => void }) {
+  const router = useRouter();
   const [sortConfig, setSortConfig] = React.useState<SortConfig | null>(null);
 
   const sortedPlans = React.useMemo(() => {
@@ -108,6 +110,7 @@ function HealthPlanList({ plans, isLoaded, onEdit, onDelete }: { plans: HealthPl
           <CardTitle>Planos Cadastrados</CardTitle>
           <CardDescription>Visualize e gerencie todos os planos de saúde e convênios.</CardDescription>
         </div>
+        <div className="flex gap-2">
         <Button 
           variant="outline" 
           size="sm" 
@@ -130,6 +133,29 @@ function HealthPlanList({ plans, isLoaded, onEdit, onDelete }: { plans: HealthPl
           <Download className="mr-2 h-4 w-4" />
           Exportar CSV (Modelo)
         </Button>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            const reportData = {
+              title: "Planos de Saúde e Convênios",
+              subtitle: "Lista de planos cadastrados",
+              headers: ["Código do Sistema", "Nome do Plano", "ID-Plano (Empresa)"],
+              rows: sortedPlans.map(p => [
+                p.codPlano,
+                p.nome,
+                p.idPlano || '-'
+              ]),
+              backUrl: '/planos-saude'
+            };
+            localStorage.setItem('print-report-data', JSON.stringify(reportData));
+            router.push('/print/report');
+          }}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Imprimir PDF
+        </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {sortedPlans.length > 0 ? (

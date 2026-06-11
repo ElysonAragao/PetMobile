@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen, Video, Calendar } from 'lucide-react';
+import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send, Scan, ClipboardList, Shield, BookOpen, Video, Calendar, Calculator, PackageOpen } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
@@ -62,7 +62,6 @@ function HomeContent() {
       icon: <PawPrint className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral'],
     },
-
     {
       title: 'Cadastro de Exames',
       description: 'Defina os tipos de exames disponíveis.',
@@ -85,6 +84,20 @@ function HomeContent() {
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
+      title: 'Cadastro de Materiais',
+      description: 'Gerencie o catálogo de produtos, insumos e EPIs.',
+      href: '/materiais',
+      icon: <PackageOpen className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
+    },
+    {
+      title: 'Orçamentos',
+      description: 'Crie estimativas de valores para exames, procedimentos e produtos.',
+      href: '/orcamento',
+      icon: <Calculator className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral'],
+    },
+    {
       title: 'Movimentação',
       description: 'Gere guias de exames com QR Code para pacientes.',
       href: '/movement',
@@ -105,7 +118,6 @@ function HomeContent() {
       icon: <BookOpen className="h-8 w-8 text-primary" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor', 'Leitor Geral', 'Relatórios'],
     },
-
     {
       title: 'Relatórios',
       description: 'Relatórios e extração de dados do sistema.',
@@ -172,3 +184,4 @@ export default function Home() {
     </Suspense>
   );
 }
+
