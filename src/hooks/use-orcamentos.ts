@@ -9,6 +9,7 @@ export interface OrcamentoSaveInput {
     validade: string;
     cliente: {
         nome: string;
+        telefone?: string;
         cpl?: string;
     };
     plano: string;
@@ -20,6 +21,38 @@ export interface OrcamentoSaveInput {
 export function useOrcamentos() {
     const supabase = React.useMemo(() => createClient(), []);
     const { selectedEmpresaId } = useSession();
+
+    const getNextOrcamentoCode = useCallback(async (empresaCodigo: string): Promise<{ codigo: string, leitura: string }> => {
+        const anoAtual = new Date().getFullYear();
+        const prefixo = `O${empresaCodigo}${anoAtual}`;
+
+        const { data, error } = await supabase
+            .from('pet_orcamentos')
+            .select('codigo')
+            .eq('empresa_id', selectedEmpresaId)
+            .like('codigo', `${prefixo}%`)
+            .order('codigo', { ascending: false })
+            .limit(1);
+
+        let nextSeq = 1;
+
+        if (!error && data && data.length > 0) {
+            const lastCode = data[0].codigo as string;
+            try {
+                const seqString = lastCode.replace(prefixo, '');
+                const lastSeq = parseInt(seqString, 10);
+                if (!isNaN(lastSeq)) {
+                    nextSeq = lastSeq + 1;
+                }
+            } catch (e) { }
+        }
+
+        const seqFormatada = String(nextSeq).padStart(5, '0');
+        return {
+            codigo: `${prefixo}${seqFormatada}`,
+            leitura: `LO${empresaCodigo}${anoAtual}${seqFormatada}`
+        };
+    }, [supabase, selectedEmpresaId]);
 
     const saveOrcamento = useCallback(async (data: OrcamentoSaveInput) => {
         if (!selectedEmpresaId) {
@@ -35,6 +68,7 @@ export function useOrcamentos() {
                     data_emissao: data.dataEmissao,
                     validade: data.validade,
                     cliente_nome: data.cliente.nome,
+                    cliente_telefone: data.cliente.telefone || null,
                     cliente_cpl: data.cliente.cpl || null,
                     plano_nome: data.plano,
                     exames: data.exames,
@@ -73,6 +107,7 @@ export function useOrcamentos() {
 
     return {
         saveOrcamento,
-        getOrcamentoByCodigo
+        getOrcamentoByCodigo,
+        getNextOrcamentoCode
     };
 }

@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Search, Printer, RefreshCw, Undo2, Camera, AlertTriangle, CheckCircle2, FileSpreadsheet, FileCode, FileJson } from 'lucide-react';
 import Link from 'next/link';
 import { useOrcamentos } from '@/hooks/use-orcamentos';
-import { format } from 'date-fns';
+import { format, isAfter, startOfDay } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export default function OrcamentoScanPage() {
   const { getOrcamentoByCodigo } = useOrcamentos();
@@ -47,11 +48,15 @@ export default function OrcamentoScanPage() {
     setError(null);
 
     try {
-      if (!scannedCode.startsWith("OPet")) {
+      if (!scannedCode.startsWith("O") && !scannedCode.startsWith("LO") && !scannedCode.startsWith("OPet") && !scannedCode.startsWith("LOPet")) {
         throw new Error("QR Code inválido. Este não parece ser um código de Orçamento válido.");
       }
 
-      const result = await getOrcamentoByCodigo(scannedCode);
+      let codigoToSearch = scannedCode;
+      if (scannedCode.startsWith("LOPet")) codigoToSearch = scannedCode.substring(1);
+      else if (scannedCode.startsWith("LO")) codigoToSearch = `O${scannedCode.substring(2)}`;
+
+      const result = await getOrcamentoByCodigo(codigoToSearch);
       
       if (!result.success || !result.data) {
         throw new Error(result.message || "Orçamento não encontrado no sistema.");
@@ -242,9 +247,16 @@ export default function OrcamentoScanPage() {
                     <p className="text-[8pt] text-slate-400 uppercase font-bold">CÓDIGO: {decodedData.codigo}</p>
                     <p className="text-[12pt] font-black text-primary">R$ {decodedData.total_estimado?.toFixed(2)}</p>
                   </div>
-                  <div className="text-[8pt] text-right text-slate-400">
-                    Emissão: {format(new Date(decodedData.data_emissao), 'dd/MM/yyyy')} <br />
-                    Validade: <strong className="text-red-500">{format(new Date(decodedData.validade), 'dd/MM/yyyy')}</strong>
+                  <div className="text-[8pt] text-right text-slate-400 flex flex-col items-end gap-1">
+                    <span>Emissão: {format(new Date(decodedData.data_emissao), 'dd/MM/yyyy')}</span>
+                    <span className="flex items-center gap-1.5">
+                      Validade: <strong className="text-foreground">{format(new Date(decodedData.validade), 'dd/MM/yyyy')}</strong>
+                      {isAfter(startOfDay(new Date()), startOfDay(new Date(decodedData.validade))) ? (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 leading-none">Vencido</Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 text-[10px] px-1.5 py-0 h-4 leading-none">Na Validade</Badge>
+                      )}
+                    </span>
                   </div>
                 </div>
 
@@ -252,16 +264,17 @@ export default function OrcamentoScanPage() {
                   <div className="space-y-1 text-sm grid grid-cols-2 bg-slate-50 p-3 rounded-lg border">
                     <p><strong>Nome do Cliente:</strong><br />{decodedData.cliente_nome}</p>
                     <p><strong>Plano/Convênio:</strong><br />{decodedData.plano_nome}</p>
+                    {decodedData.cliente_telefone && <p className="col-span-2 mt-2 pt-2 border-t border-slate-200"><strong>Telefone:</strong><br />{decodedData.cliente_telefone}</p>}
                   </div>
                   
                   {decodedData.exames?.length > 0 && (
                     <div>
                         <h4 className="font-bold text-sm text-slate-500 mb-2 uppercase">Exames ({decodedData.exames.length})</h4>
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                             {decodedData.exames.map((e: any, i: number) => (
-                                <div key={i} className="text-xs flex justify-between border-b pb-1">
-                                    <span>{e.name}</span>
-                                    <span className="font-semibold text-slate-600">R$ {e.precoCalculado?.toFixed(2)}</span>
+                                <div key={i} className="text-xs flex flex-col sm:flex-row sm:justify-between border-b border-slate-100 pb-1.5 gap-1">
+                                    <span><strong className="font-mono">{e.idExame || e.examCode}</strong> — {e.name}</span>
+                                    <span className="font-semibold text-slate-600 sm:text-right">R$ {e.precoCalculado?.toFixed(2)}</span>
                                 </div>
                             ))}
                         </div>
@@ -271,11 +284,18 @@ export default function OrcamentoScanPage() {
                   {decodedData.materiais?.length > 0 && (
                     <div className="pt-2">
                         <h4 className="font-bold text-sm text-slate-500 mb-2 uppercase">Materiais ({decodedData.materiais.length})</h4>
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                             {decodedData.materiais.map((m: any, i: number) => (
-                                <div key={i} className="text-xs flex justify-between border-b pb-1">
-                                    <span>{m.descricao}</span>
-                                    <span className="font-semibold text-slate-600">R$ {m.precoUnitario?.toFixed(2)}</span>
+                                <div key={i} className="text-xs flex flex-col sm:flex-row sm:justify-between border-b border-slate-100 pb-1.5 gap-1">
+                                    <span>
+                                        <strong className="font-mono">{m.idMaterial || m.codigo || 'S/C'}</strong> — {m.descricao}
+                                    </span>
+                                    <span className="font-semibold text-slate-600 sm:text-right whitespace-nowrap">
+                                        <span className="text-slate-400 font-normal mr-2">
+                                            {m.quantidade || 1}x R$ {m.precoUnitario?.toFixed(2)} =
+                                        </span>
+                                        R$ {(m.totalItem || (m.precoUnitario * (m.quantidade || 1)))?.toFixed(2)}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -298,7 +318,7 @@ export default function OrcamentoScanPage() {
                       codigo: decodedData.codigo,
                       dataEmissao: decodedData.data_emissao,
                       validade: decodedData.validade,
-                      cliente: { nome: decodedData.cliente_nome, cpl: decodedData.cliente_cpl },
+                      cliente: { nome: decodedData.cliente_nome, telefone: decodedData.cliente_telefone, cpl: decodedData.cliente_cpl },
                       plano: decodedData.plano_nome,
                       exames: decodedData.exames,
                       materiais: decodedData.materiais,

@@ -82,14 +82,12 @@ function MaterialList({ materiais, onEdit, onDelete }: {
   };
 
   const categories = [
-    'Medicamentos e Suplementos', 
-    'Nutrição Clínica', 
-    'Higiene e Estética', 
-    'Acessórios de Proteção', 
-    'Insumos Clínicos e Descartáveis', 
-    'EPIs', 
-    'Diagnóstico Rápido', 
-    'Outros'
+    'Alimento', 
+    'Material', 
+    'Medicamento/Suplemento', 
+    'Equipamento', 
+    'Insumo', 
+    'Outro'
   ];
 
   return (
@@ -203,7 +201,7 @@ export default function MateriaisPage() {
       codigo: "",
       idMaterial: "",
       descricao: "",
-      categoria: "Insumos Clínicos e Descartáveis",
+      categoria: "Insumo",
       precoUnitario: 0,
       unidade: "Unidade",
       estoque: 0,
@@ -217,7 +215,7 @@ export default function MateriaisPage() {
         codigo: nextCode,
         idMaterial: "",
         descricao: "",
-        categoria: "Insumos Clínicos e Descartáveis",
+        categoria: "Insumo",
         precoUnitario: 0,
         unidade: "Unidade",
         estoque: 0,
@@ -240,7 +238,7 @@ export default function MateriaisPage() {
         codigo: nextCode, 
         idMaterial: "",
         descricao: "", 
-        categoria: "Insumos Clínicos e Descartáveis", 
+        categoria: "Insumo", 
         precoUnitario: 0, 
         unidade: "Unidade", 
         estoque: 0 
@@ -329,7 +327,7 @@ export default function MateriaisPage() {
 
         const codigo = colCod !== -1 ? cols[colCod]?.trim() : undefined;
         const idMaterial = colIdMat !== -1 ? cols[colIdMat]?.trim() : undefined;
-        const categoria = colCat !== -1 ? cols[colCat]?.trim() : 'Insumos Clínicos e Descartáveis';
+        const categoria = colCat !== -1 ? cols[colCat]?.trim() : 'Insumo';
         const unidade = colUnid !== -1 ? cols[colUnid]?.trim() : 'Unidade';
         
         let estoque = 0;
@@ -380,14 +378,12 @@ export default function MateriaisPage() {
   };
 
   const categories = [
-    'Medicamentos e Suplementos', 
-    'Nutrição Clínica', 
-    'Higiene e Estética', 
-    'Acessórios de Proteção', 
-    'Insumos Clínicos e Descartáveis', 
-    'EPIs', 
-    'Diagnóstico Rápido', 
-    'Outros'
+    'Alimento', 
+    'Material', 
+    'Medicamento/Suplemento', 
+    'Equipamento', 
+    'Insumo', 
+    'Outro'
   ];
 
   return (
@@ -433,7 +429,10 @@ export default function MateriaisPage() {
               materiais={materiais} 
               onEdit={(m) => {
                 setSelectedMaterial(m);
-                form.reset(m);
+                form.reset({
+                  ...m,
+                  idMaterial: m.idMaterial || ""
+                });
                 setIsEditDialogOpen(true);
               }}
               onDelete={async (id) => {

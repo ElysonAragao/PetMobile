@@ -1,5 +1,19 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-06-13] - Otimização de Orçamentos e Laboratório de OCR (Tatuagens)
+
+### 📄 Refinamentos no Orçamento e Impressão PDF
+- **Categorização de Materiais**: Padronização global das categorias (Alimento, Material, Medicamento/Suplemento, Equipamento, Insumo, Outro).
+- **Auto-preenchimento de ID**: O sistema agora aproveita o código sequencial gerado para preencher o `ID Material` de forma automática caso o usuário o deixe em branco durante o cadastro/edição.
+- **Detalhamento no PDF**: A tabela impressa de materiais agora mostra explicitamente a conta matemática de preço unitário e quantidade (`2x R$ 50.00 = R$ 100.00`).
+- **Quebra de Página Avançada**: Implementada tabela inteligente (`thead`) que repete automaticamente o cabeçalho "Continuação - Orçamento - OPet..." nas impressões longas que passam para a segunda página.
+- **Status de Leitura no PDF**: Documentos impressos a partir do Scanner agora são nomeados como "LEITURA DO ORÇAMENTO" e exibem uma tag de status verde/vermelha mostrando `(NA VALIDADE)` ou `(VENCIDO)`.
+
+### 🔍 Laboratório Experimental de OCR (Tatuagens)
+- **Leitura Inteligente de Tatuagens**: Instalação e integração local da biblioteca `Tesseract.js` para reconhecimento de padrões numéricos em pele de animais.
+- **Novo Módulo de Teste**: Criada a rota laboratorial `/tattoo-scan` (Leitura de Tatuagem - Teste), permitindo o upload de fotos da pele do pet para extração imediata do código.
+- **Calibração de IA**: Configuração de "Whitelist" no motor de OCR, forçando a IA a ignorar ruídos (sombras e pelos) e procurar exclusivamente por números, letras e traços, elevando a confiabilidade do processo para testes de campo.
+
 ## [2026-06-11] - Módulo Completo de Orçamentos e Exportação
 
 ### 📄 PDF e Layout Profissional de Orçamentos

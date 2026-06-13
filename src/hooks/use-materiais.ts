@@ -105,7 +105,7 @@ export function useMateriais() {
             const insertData = {
                 empresa_id: selectedEmpresaId,
                 codigo: nextCode,
-                id_material: data.idMaterial?.trim() || null,
+                id_material: data.idMaterial?.trim() || nextCode,
                 descricao: data.descricao,
                 categoria: data.categoria,
                 preco_unitario: data.precoUnitario,
@@ -132,7 +132,7 @@ export function useMateriais() {
         try {
             const updateData: any = {};
             if (data.codigo !== undefined) updateData.codigo = data.codigo;
-            if (data.idMaterial !== undefined) updateData.id_material = data.idMaterial;
+            if (data.idMaterial !== undefined) updateData.id_material = data.idMaterial?.trim() || data.codigo;
             if (data.descricao !== undefined) updateData.descricao = data.descricao;
             if (data.categoria !== undefined) updateData.categoria = data.categoria;
             if (data.precoUnitario !== undefined) updateData.preco_unitario = data.precoUnitario;

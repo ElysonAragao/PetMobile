@@ -6,7 +6,7 @@ import { Beaker, Loader2, AlertTriangle, Printer, Info, PawPrint, Undo2, Box } f
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { format } from 'date-fns';
+import { format, isAfter, startOfDay } from 'date-fns';
 
 function PrintOrcamentoContent() {
     const { id } = useParams();
@@ -65,8 +65,12 @@ function PrintOrcamentoContent() {
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
     if (error || !orcamento) return <div className="p-10 text-center text-red-500"><AlertTriangle className="mx-auto mb-4" /> Erro: {error || 'Dados não encontrados'}</div>;
 
-    const titulo = "Orçamento de Serviços";
-    const subTitulo = "Estimativa de valores para exames, procedimentos e produtos médicos.";
+    const titulo = origin === 'scan' ? "LEITURA DO ORÇAMENTO" : "ORÇAMENTO DE SERVIÇOS / MATERIAIS";
+    const subTitulo = origin === 'scan' 
+        ? "Comprovante de verificação e leitura de orçamento."
+        : "Estimativa de valores para exames, procedimentos e produtos médicos.";
+        
+    const isVencido = isAfter(startOfDay(new Date()), startOfDay(new Date(orcamento.validade)));
 
     return (
         <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
@@ -94,8 +98,13 @@ function PrintOrcamentoContent() {
                     <div className="text-[10pt]">
                         <strong>Data de Emissão:</strong> {format(new Date(orcamento.dataEmissao), 'dd/MM/yyyy')}
                     </div>
-                    <div className="text-[10pt] text-red-600">
+                    <div className={`text-[10pt] ${origin === 'scan' ? (isVencido ? 'text-red-600' : 'text-emerald-600') : 'text-red-600'}`}>
                         <strong>Validade:</strong> {format(new Date(orcamento.validade), 'dd/MM/yyyy')}
+                        {origin === 'scan' && (
+                            <span className="ml-2 font-black uppercase text-[10pt]">
+                                {isVencido ? "(VENCIDO)" : "(NA VALIDADE)"}
+                            </span>
+                        )}
                     </div>
                 </div>
                 <div className="text-right">
@@ -108,10 +117,11 @@ function PrintOrcamentoContent() {
                 <div className="space-y-0.5">
                     <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Dados do Cliente</div>
                     <div className="grid grid-cols-12 gap-x-2">
-                        <div className="col-span-6"><strong>NOME:</strong> {orcamento.cliente.nome}</div>
-                        <div className="col-span-6"><strong>COMPLEMENTO:</strong> {orcamento.cliente.cpl || '-'}</div>
+                        <div className="col-span-5"><strong>NOME:</strong> {orcamento.cliente.nome}</div>
+                        <div className="col-span-3"><strong>TELEFONE:</strong> {orcamento.cliente.telefone || '-'}</div>
+                        <div className="col-span-4"><strong>COMPLEMENTO:</strong> {orcamento.cliente.cpl || '-'}</div>
                     </div>
-                    <div className="grid grid-cols-12 gap-x-2 border-b border-dotted border-gray-400 pb-0.5">
+                    <div className="grid grid-cols-12 gap-x-2 border-b border-dotted border-gray-400 pb-0.5 mt-1">
                         <div className="col-span-12"><strong>PLANO / CONVÊNIO:</strong> <span className="text-primary font-semibold">{orcamento.plano}</span></div>
                     </div>
                 </div>
@@ -126,19 +136,26 @@ function PrintOrcamentoContent() {
                 {orcamento.exames?.length > 0 && (
                     <div className="mb-4">
                         <h2 className="text-[11pt] font-bold mb-2 flex items-center gap-2">
-                            <Beaker size={18} /> Exames Estimados
+                            <Beaker size={18} /> Exames Estimados ({orcamento.exames.length})
                         </h2>
                         <table className="w-full text-[10pt] border-collapse mb-2">
-                            <thead>
+                            <thead className="print:table-header-group">
+                                <tr className="hidden print:table-row">
+                                    <td colSpan={3} className="text-[8pt] text-gray-400 pb-2 pt-4 italic">
+                                        Continuação - {titulo} - {orcamento.codigo}
+                                    </td>
+                                </tr>
                                 <tr className="border-b border-gray-300 text-left">
+                                    <th className="py-1 w-[20px] text-gray-400">#</th>
                                     <th className="py-1">Descrição</th>
                                     <th className="py-1 text-right">Valor Estimado</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {orcamento.exames.map((exam: any, idx: number) => (
-                                    <tr key={idx} className="border-b border-gray-100 last:border-0">
-                                        <td className="py-1">{exam.name}</td>
+                                    <tr key={idx} className="border-b border-gray-100 last:border-0 print:break-inside-avoid">
+                                        <td className="py-1 text-gray-400 font-mono text-xs">{idx + 1}</td>
+                                        <td className="py-1"><span className="font-mono text-xs text-gray-600 font-bold">{exam.idExame || exam.examCode}</span> — {exam.name}</td>
                                         <td className="py-1 text-right">R$ {exam.precoCalculado?.toFixed(2)}</td>
                                     </tr>
                                 ))}
@@ -150,20 +167,32 @@ function PrintOrcamentoContent() {
                 {orcamento.materiais?.length > 0 && (
                     <div className="mb-4">
                         <h2 className="text-[11pt] font-bold mb-2 flex items-center gap-2">
-                            <Box size={18} /> Materiais e Produtos Estimados
+                            <Box size={18} /> Materiais e Produtos Estimados ({orcamento.materiais.length})
                         </h2>
                         <table className="w-full text-[10pt] border-collapse mb-2">
-                            <thead>
+                            <thead className="print:table-header-group">
+                                <tr className="hidden print:table-row">
+                                    <td colSpan={3} className="text-[8pt] text-gray-400 pb-2 pt-4 italic">
+                                        Continuação - {titulo} - {orcamento.codigo}
+                                    </td>
+                                </tr>
                                 <tr className="border-b border-gray-300 text-left">
+                                    <th className="py-1 w-[20px] text-gray-400">#</th>
                                     <th className="py-1">Descrição</th>
                                     <th className="py-1 text-right">Valor Estimado</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {orcamento.materiais.map((mat: any, idx: number) => (
-                                    <tr key={idx} className="border-b border-gray-100 last:border-0">
-                                        <td className="py-1">{mat.descricao}</td>
-                                        <td className="py-1 text-right">R$ {mat.precoUnitario?.toFixed(2)}</td>
+                                    <tr key={idx} className="border-b border-gray-100 last:border-0 print:break-inside-avoid">
+                                        <td className="py-1 text-gray-400 font-mono text-xs">{idx + 1}</td>
+                                        <td className="py-1"><span className="font-mono text-xs text-gray-600 font-bold">{mat.idMaterial || mat.codigo || 'S/C'}</span> — {mat.descricao}</td>
+                                        <td className="py-1 text-right">
+                                           <span className="text-gray-500 text-[9pt] mr-2">
+                                               {mat.quantidade || 1}x R$ {mat.precoUnitario?.toFixed(2)} =
+                                           </span>
+                                           R$ {(mat.totalItem || mat.precoCalculado || (mat.precoUnitario * (mat.quantidade || 1)))?.toFixed(2)}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

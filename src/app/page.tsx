@@ -138,6 +138,13 @@ function HomeContent() {
       href: '/cameras',
       icon: <Video className="h-8 w-8 text-blue-500" />,
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral'],
+    },
+    {
+      title: 'Leitura de Tatuagem - Teste',
+      description: 'Módulo laboratório para testar OCR em tatuagens de animais.',
+      href: '/tattoo-scan',
+      icon: <Scan className="h-8 w-8 text-indigo-500" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral'],
     }
   ];
 
