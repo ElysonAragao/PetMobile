@@ -7,7 +7,7 @@ import { Pet } from '@/lib/types';
 import { useSession } from '@/context/session-context';
 import { z } from "zod";
 
-const petSchema = z.object({
+export const petSchema = z.object({
   codPet: z.string().optional(),
   nome: z.string().min(1, "Nome do pet é obrigatório"),
   especie: z.string().min(1, "Espécie é obrigatória (Cão, Gato, etc)"),

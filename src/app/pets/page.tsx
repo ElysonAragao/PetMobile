@@ -9,7 +9,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { Pet, HealthPlan } from '@/lib/types';
-import { usePets, PetFormValues, calculateAge } from '@/hooks/use-pets';
+import { usePets, PetFormValues, petSchema, calculateAge } from '@/hooks/use-pets';
 import { useHealthPlans } from '@/hooks/use-health-plans';
 import { useEspecies, Especie } from '@/hooks/use-especies';
 import { exportToCSV } from '@/lib/export-utils';
@@ -43,27 +43,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const petSchema = z.object({
-  codPet: z.string().optional(),
-  nome: z.string().min(1, "Nome do pet é obrigatório"),
-  especie: z.string().min(1, "Espécie é obrigatória"),
-  raca: z.string().optional().or(z.literal('')),
-  sexo: z.enum(['M', 'F'], { required_error: "Sexo é obrigatório" }),
-  idade: z.string().optional().or(z.literal('')),
-  dataNascimento: z.string().optional().or(z.literal('')).nullable(),
-  tutorNome: z.string().min(1, "Nome do tutor é obrigatório"),
-  tutorCpf: z.string().min(11, "CPF deve ter no mínimo 11 dígitos"),
-  tutorEmail: z.string().email("E-mail inválido").or(z.literal('')).optional().default(''),
-  tutorTelefone: z.string().min(1, "Telefone é obrigatório"), // Mantemos obrigatório para novos e correções
-  tutorEndereco: z.string().optional().or(z.literal('')),
-  tutorCep: z.string().optional().or(z.literal('')),
-  tutorBairro: z.string().optional().or(z.literal('')),
-  tutorCidade: z.string().optional().or(z.literal('')),
-  tutorUf: z.string().optional().or(z.literal('')),
-  matricula: z.string().optional().or(z.literal('')),
-  healthPlanCode: z.string().optional().or(z.literal('')),
-  healthPlanName: z.string().optional().or(z.literal('')),
-});
+
 
 function PetForm({
   form,
