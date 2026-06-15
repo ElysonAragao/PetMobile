@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PackageOpen, PlusCircle, Trash2, Edit, Box, Undo2, Printer, Upload, Download } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Material } from '@/lib/types';
 import { useMateriais, MaterialFormValues, materialSchema } from '@/hooks/use-materiais';
@@ -47,18 +47,22 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from '@/components/ui/badge';
 
-function MaterialList({ materiais, onEdit, onDelete }: { 
+function MaterialList({ materiais, onEdit, onDelete, searchId }: { 
   materiais: Material[], 
   onEdit: (material: Material) => void,
-  onDelete: (id: string) => void
+  onDelete: (id: string) => void,
+  searchId?: string | null
 }) {
   const router = useRouter();
   const [selectedCategory, setSelectedCategory] = React.useState('all');
+  const [materialToPrint, setMaterialToPrint] = React.useState<Material | null>(null);
 
   const filteredMateriais = React.useMemo(() => {
-    if (selectedCategory === 'all') return materiais;
-    return materiais.filter(m => m.categoria === selectedCategory);
-  }, [materiais, selectedCategory]);
+    let filtered = materiais;
+    if (searchId) filtered = filtered.filter(m => m.id === searchId);
+    if (selectedCategory !== 'all') filtered = filtered.filter(m => m.categoria === selectedCategory);
+    return filtered;
+  }, [materiais, selectedCategory, searchId]);
 
   const handlePrint = () => {
     const reportData = {
@@ -95,7 +99,18 @@ function MaterialList({ materiais, onEdit, onDelete }: {
       <CardHeader className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
           <CardTitle>Materiais Cadastrados</CardTitle>
-          <CardDescription>Gerencie o catálogo de produtos e insumos da clínica.</CardDescription>
+          <CardDescription>
+            {searchId ? (
+              <div className="text-orange-600 font-medium flex flex-wrap items-center mt-1">
+                Exibindo resultado da leitura. 
+                <Link href="/materiais" className="underline font-bold ml-2 hover:text-orange-700">Limpar</Link>
+                <span className="mx-2 text-slate-300">|</span>
+                <Link href="/scan-material" className="text-blue-600 underline font-bold hover:text-blue-800">Ler Novo QR Code</Link>
+              </div>
+            ) : (
+              "Gerencie o catálogo de produtos e insumos da clínica."
+            )}
+          </CardDescription>
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -148,6 +163,9 @@ function MaterialList({ materiais, onEdit, onDelete }: {
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(material.precoUnitario)}
                   </TableCell>
                   <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" title="Imprimir Crachá/Etiqueta" onClick={() => setMaterialToPrint(material)}>
+                      <Printer className="h-4 w-4 text-blue-500" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => onEdit(material)}>
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -182,13 +200,50 @@ function MaterialList({ materiais, onEdit, onDelete }: {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={!!materialToPrint} onOpenChange={(open) => !open && setMaterialToPrint(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Imprimir Identificação do Material</DialogTitle>
+            <DialogDescription>
+              Escolha o formato de impressão para {materialToPrint?.descricao}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Button 
+              variant="outline" 
+              className="h-24 flex flex-col items-center justify-center gap-2"
+              onClick={() => {
+                window.open(`/print/material/${materialToPrint?.id}`, '_blank');
+                setMaterialToPrint(null);
+              }}
+            >
+              <Box className="h-8 w-8 text-primary" />
+              <span>Identificação (Térmica 58mm)</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-24 flex flex-col items-center justify-center gap-2"
+              onClick={() => {
+                window.open(`/print/material-label/${materialToPrint?.id}`, '_blank');
+                setMaterialToPrint(null);
+              }}
+            >
+              <PackageOpen className="h-8 w-8 text-indigo-500" />
+              <span>Etiqueta (58x30mm)</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
 
 export default function MateriaisPage() {
   const { materiais, addMaterial, updateMaterial, deleteMaterial, isLoaded, error, getNextMaterialCode } = useMateriais();
-  const [activeTab, setActiveTab] = React.useState("list");
+  const searchParams = useSearchParams();
+  const searchId = searchParams.get('searchId');
+  const [activeTab, setActiveTab] = React.useState(searchParams.get('tab') || "list");
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedMaterial, setSelectedMaterial] = React.useState<Material | null>(null);
   const [isImporting, setIsImporting] = React.useState(false);
@@ -225,10 +280,15 @@ export default function MateriaisPage() {
 
   const handleFormSubmit = async (values: MaterialFormValues) => {
     let result;
+    const finalValues = { ...values };
+    if (!finalValues.idMaterial || finalValues.idMaterial.trim() === "") {
+      finalValues.idMaterial = finalValues.codigo;
+    }
+
     if (selectedMaterial) {
-      result = await updateMaterial(selectedMaterial.id, values);
+      result = await updateMaterial(selectedMaterial.id, finalValues);
     } else {
-      result = await addMaterial(values);
+      result = await addMaterial(finalValues);
     }
 
     if (result.success) {
@@ -427,6 +487,7 @@ export default function MateriaisPage() {
           ) : (
             <MaterialList 
               materiais={materiais} 
+              searchId={searchId}
               onEdit={(m) => {
                 setSelectedMaterial(m);
                 form.reset({

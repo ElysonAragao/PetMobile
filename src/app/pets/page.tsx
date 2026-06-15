@@ -77,6 +77,8 @@ function PetForm({
   tutorCpfInputRef,
   isCpfLocked = false,
   onClearLookup,
+  petsForCpf = [],
+  onSelectPetToEdit,
   onCancel
 }: {
   form: UseFormReturn<PetFormValues>,
@@ -90,6 +92,8 @@ function PetForm({
   tutorCpfInputRef?: React.RefObject<HTMLInputElement>,
   isCpfLocked?: boolean,
   onClearLookup?: () => void,
+  petsForCpf?: Pet[],
+  onSelectPetToEdit?: (pet: Pet) => void,
   onCancel?: () => void
 }) {
   const nameInputRef = React.useRef<HTMLInputElement>(null);
@@ -113,7 +117,7 @@ function PetForm({
         }
       }
       
-      const especieNorm = matchedEspecie || especies.find(e => e.nome === 'Outro')?.nome || especies[0]?.nome || 'Outro';
+      const especieNorm = matchedEspecie || '';
 
       // Normalização ultra-robusta de Sexo
       const rawSexo = String(initialData.sexo || '').trim().toLowerCase();
@@ -140,6 +144,20 @@ function PetForm({
         healthPlanName: initialData.healthPlanName || '',
         matricula: initialData.matricula || '',
         codPet: initialData.codPet || '',
+        idRegistro: initialData.idRegistro || '',
+        dadosFamiliaresAtivo: initialData.dadosFamiliaresAtivo || false,
+        paiNome: initialData.paiNome || '',
+        paiRegistro: initialData.paiRegistro || '',
+        paiInseminacao: initialData.paiInseminacao || false,
+        semenRegistro: initialData.semenRegistro || '',
+        maeNome: initialData.maeNome || '',
+        maeRegistro: initialData.maeRegistro || '',
+        paiPedigree: initialData.paiPedigree || '',
+        maePedigree: initialData.maePedigree || '',
+        dadosMovimentacaoAtivo: initialData.dadosMovimentacaoAtivo || false,
+        pesagens: initialData.pesagens || [],
+        statusReprodutivo: initialData.statusReprodutivo || '',
+        filhos: initialData.filhos || [],
       } as any);
 
       // Sincronizar manualmente para garantir o visual imediato
@@ -172,6 +190,30 @@ function PetForm({
         onSubmit={form.handleSubmit(onSubmit)} 
         className="space-y-6"
       >
+        {!isEdit && petsForCpf.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex-1">
+              <h4 className="font-semibold text-blue-800 text-sm">Pets encontrados para este Tutor:</h4>
+              <p className="text-xs text-blue-600 mt-1">Se deseja editar um pet existente, selecione-o abaixo. Para um novo pet, apenas continue preenchendo o formulário abaixo.</p>
+            </div>
+            <div className="w-full sm:w-64">
+              <Select onValueChange={(petId) => {
+                const pet = petsForCpf.find(p => p.id === petId);
+                if (pet && onSelectPetToEdit) onSelectPetToEdit(pet);
+              }}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Selecione para editar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {petsForCpf.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.nome} ({p.especie})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -255,20 +297,33 @@ function PetForm({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="codPet"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Código do Pet (Automático)</FormLabel>
-                <FormControl>
-                  <Input placeholder="PET-XXXX" {...field} disabled />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+            <FormField
+              control={form.control}
+              name="codPet"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Código do Pet (Automático)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="PET-XXXX" {...field} disabled />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="idRegistro"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>ID-Registro (Tatuagem)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Identificação da Tatuagem" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
@@ -463,6 +518,222 @@ function PetForm({
           />
         </div>
 
+        {/* --- DADOS COMPLEMENTARES --- */}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 border p-4 rounded-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg">Dados Familiares</h3>
+                <p className="text-sm text-muted-foreground">Registre informações de filiação e pedigree.</p>
+              </div>
+              <Button 
+                type="button" 
+                variant={form.watch('dadosFamiliaresAtivo') ? "default" : "outline"}
+                onClick={() => form.setValue('dadosFamiliaresAtivo', !form.watch('dadosFamiliaresAtivo'))}
+              >
+                {form.watch('dadosFamiliaresAtivo') ? 'Remover Dados Familiares' : 'Adicionar Dados Familiares'}
+              </Button>
+            </div>
+            
+            {form.watch('dadosFamiliaresAtivo') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                <FormField control={form.control} name="paiNome" render={({ field }) => (
+                  <FormItem><FormLabel>Nome do Pai</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="paiRegistro" render={({ field }) => (
+                  <FormItem><FormLabel>Registro do Pai</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="paiPedigree" render={({ field }) => (
+                  <FormItem><FormLabel>Pedigree do Pai</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+                <div className="flex flex-col gap-4">
+                   <div className="flex items-center space-x-2 pt-8">
+                    <FormField control={form.control} name="paiInseminacao" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                           <input type="checkbox" checked={field.value} onChange={field.onChange} className="w-4 h-4 mt-1" />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Pai por Inseminação</FormLabel>
+                        </div>
+                      </FormItem>
+                    )} />
+                   </div>
+                   {form.watch('paiInseminacao') && (
+                     <FormField control={form.control} name="semenRegistro" render={({ field }) => (
+                        <FormItem><FormLabel>Registro do Sêmen</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                     )} />
+                   )}
+                </div>
+
+                <div className="col-span-full border-t my-2" />
+
+                <FormField control={form.control} name="maeNome" render={({ field }) => (
+                  <FormItem><FormLabel>Nome da Mãe</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="maeRegistro" render={({ field }) => (
+                  <FormItem><FormLabel>Registro da Mãe</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="maePedigree" render={({ field }) => (
+                  <FormItem><FormLabel>Pedigree da Mãe</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                )} />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-4 border p-4 rounded-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg">Dados de Movimentação/Saúde</h3>
+                <p className="text-sm text-muted-foreground">Registre histórico de peso e reprodução.</p>
+              </div>
+              <Button 
+                type="button" 
+                variant={form.watch('dadosMovimentacaoAtivo') ? "default" : "outline"}
+                onClick={() => form.setValue('dadosMovimentacaoAtivo', !form.watch('dadosMovimentacaoAtivo'))}
+              >
+                {form.watch('dadosMovimentacaoAtivo') ? 'Remover Dados de Saúde' : 'Adicionar Dados de Saúde'}
+              </Button>
+            </div>
+            
+            {form.watch('dadosMovimentacaoAtivo') && (
+              <div className="space-y-4 pt-4 border-t">
+                <div>
+                  <h4 className="font-medium mb-2">Histórico de Pesagem (3 últimas)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[0, 1, 2].map((idx) => {
+                      const pesagens = form.watch('pesagens') || [];
+                      const pesoAt = pesagens[idx] || { data: '', peso: '' };
+                      return (
+                        <div key={idx} className="flex flex-col gap-2 p-3 border rounded">
+                           <div className="text-sm font-medium">Pesagem {idx + 1}</div>
+                           <Input 
+                             type="date" 
+                             value={pesoAt.data} 
+                             onChange={(e) => {
+                               const newP = [...pesagens];
+                               newP[idx] = { ...pesoAt, data: e.target.value };
+                               form.setValue('pesagens', newP);
+                             }} 
+                             placeholder="Data" 
+                           />
+                           <Input 
+                             type="text" 
+                             value={pesoAt.peso} 
+                             onChange={(e) => {
+                               const newP = [...pesagens];
+                               newP[idx] = { ...pesoAt, peso: e.target.value };
+                               form.setValue('pesagens', newP);
+                             }} 
+                             placeholder="Peso (ex: 12kg)" 
+                           />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-4">Dados Reprodutivos e Filhos</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <FormField control={form.control} name="statusReprodutivo" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status (Fêmea)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Nenhum">Nenhum</SelectItem>
+                              <SelectItem value="Prenha">Prenha</SelectItem>
+                              <SelectItem value="Parida">Parida</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                      
+                      <FormField control={form.control} name="dataUltimaCria" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data da Última Cria</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                      
+                      <FormField control={form.control} name="dataInseminacao" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data Inseminação / Cobertura</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+
+                      <FormField control={form.control} name="quantidadeFilhos" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Qtd. de Filhos (Ninhada/Total)</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="Ex: 3" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                    </div>
+
+                    <h4 className="font-medium mb-2 text-sm">Registro de Filhos (Até 5)</h4>
+                    <div className="space-y-2">
+                      {[0, 1, 2, 3, 4].map((idx) => {
+                        const filhos = form.watch('filhos') || [];
+                        const filhoAt = filhos[idx] || { dataNascimento: '', peso: '', sexo: '' };
+                        return (
+                          <div key={idx} className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+                            <span className="text-xs font-semibold w-12 shrink-0">Filho {idx+1}</span>
+                            <Input 
+                               type="date" 
+                               className="w-full sm:w-40 h-9"
+                               value={filhoAt.dataNascimento} 
+                               onChange={(e) => {
+                                 const newF = [...filhos];
+                                 newF[idx] = { ...filhoAt, dataNascimento: e.target.value };
+                                 form.setValue('filhos', newF);
+                               }} 
+                             />
+                             <Select 
+                               value={filhoAt.sexo} 
+                               onValueChange={(v) => {
+                                 const newF = [...filhos];
+                                 newF[idx] = { ...filhoAt, sexo: v };
+                                 form.setValue('filhos', newF);
+                               }}
+                             >
+                                <SelectTrigger className="w-full sm:w-28 h-9"><SelectValue placeholder="Sexo" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="M">Macho</SelectItem>
+                                  <SelectItem value="F">Fêmea</SelectItem>
+                                </SelectContent>
+                             </Select>
+                             <Input 
+                               type="text" 
+                               placeholder="Peso/Obs"
+                               className="w-full sm:flex-1 h-9"
+                               value={filhoAt.peso} 
+                               onChange={(e) => {
+                                 const newF = [...filhos];
+                                 newF[idx] = { ...filhoAt, peso: e.target.value };
+                                 form.setValue('filhos', newF);
+                               }} 
+                             />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-3">
           <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
             {form.formState.isSubmitting ? 'Salvando...' : (
@@ -489,17 +760,19 @@ function PetForm({
   );
 }
 
-function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: boolean, onEdit: (pet: Pet) => void, onDelete: (id: string) => void }) {
+function PetList({ pets, isLoaded, onEdit, onDelete, searchId }: { pets: Pet[], isLoaded: boolean, onEdit: (pet: Pet) => void, onDelete: (id: string) => void, searchId?: string | null }) {
   const router = useRouter();
   const [sortConfig, setSortConfig] = React.useState<{key: keyof Pet, direction: 'asc' | 'desc'} | null>(null);
   const [selectedPlanFilter, setSelectedPlanFilter] = React.useState('all');
   const [selectedEspecieFilter, setSelectedEspecieFilter] = React.useState('all');
+  const [petToPrint, setPetToPrint] = React.useState<Pet | null>(null);
 
   const uniquePlanos = React.useMemo(() => Array.from(new Set(pets.map(p => p.healthPlanName || 'Particular'))).sort(), [pets]);
   const uniqueEspecies = React.useMemo(() => Array.from(new Set(pets.map(p => p.especie || 'Outro'))).sort(), [pets]);
 
   const sortedPets = React.useMemo(() => {
     let filteredItems = pets.filter(p => {
+      if (searchId && p.id !== searchId) return false;
       const plano = p.healthPlanName || 'Particular';
       if (selectedPlanFilter !== 'all' && plano !== selectedPlanFilter) return false;
       
@@ -545,7 +818,18 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
       <CardHeader className="flex flex-col space-y-4 xl:flex-row xl:items-center xl:justify-between xl:space-y-0">
         <div>
           <CardTitle>Pets Cadastrados</CardTitle>
-          <CardDescription>Visualize e gerencie todos os animais registrados na clínica.</CardDescription>
+          <CardDescription>
+            {searchId ? (
+              <div className="text-orange-600 font-medium flex flex-wrap items-center mt-1">
+                Exibindo resultado da leitura. 
+                <Link href="/pets" className="underline font-bold ml-2 hover:text-orange-700">Limpar</Link>
+                <span className="mx-2 text-slate-300">|</span>
+                <Link href="/scan-pet" className="text-blue-600 underline font-bold hover:text-blue-800">Ler Novo QR Code</Link>
+              </div>
+            ) : (
+              "Visualize e gerencie todos os animais registrados na clínica."
+            )}
+          </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={selectedPlanFilter} onValueChange={setSelectedPlanFilter}>
@@ -715,6 +999,9 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
                   <TableCell>{pet.tutorCpf}</TableCell>
                   <TableCell>{pet.healthPlanName}</TableCell>
                   <TableCell className="text-right flex justify-end gap-1">
+                    <Button variant="ghost" size="icon" title="Imprimir Crachá/Etiqueta" onClick={() => setPetToPrint(pet)}>
+                      <Printer className="h-4 w-4 text-blue-500" />
+                    </Button>
                     <Link href={`/pets/${pet.id}/prontuario`} passHref>
                       <Button variant="ghost" size="icon" title="Prontuário Digital">
                         <FileText className="h-4 w-4 text-primary" />
@@ -734,6 +1021,41 @@ function PetList({ pets, isLoaded, onEdit, onDelete }: { pets: Pet[], isLoaded: 
           </div>
         )}
       </CardContent>
+
+      <Dialog open={!!petToPrint} onOpenChange={(open) => !open && setPetToPrint(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Imprimir Identificação</DialogTitle>
+            <DialogDescription>
+              Escolha o formato de impressão para {petToPrint?.nome}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Button 
+              variant="outline" 
+              className="h-24 flex flex-col items-center justify-center gap-2"
+              onClick={() => {
+                window.open(`/print/pet/${petToPrint?.id}`, '_blank');
+                setPetToPrint(null);
+              }}
+            >
+              <FileText className="h-8 w-8 text-primary" />
+              <span>Crachá (Térmica 58mm)</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-24 flex flex-col items-center justify-center gap-2"
+              onClick={() => {
+                window.open(`/print/pet-label/${petToPrint?.id}`, '_blank');
+                setPetToPrint(null);
+              }}
+            >
+              <PawPrint className="h-8 w-8 text-indigo-500" />
+              <span>Etiqueta (58x30mm)</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -748,10 +1070,12 @@ export default function PetsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchId = searchParams.get('searchId');
   const [activeTab, setActiveTab] = React.useState(searchParams.get('tab') || "list");
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedPet, setSelectedPet] = React.useState<Pet | null>(null);
   const [isCpfLocked, setIsCpfLocked] = React.useState(false);
+  const [petsForCpf, setPetsForCpf] = React.useState<Pet[]>([]);
   const tutorCpfInputRef = React.useRef<HTMLInputElement>(null);
 
   const form = useForm<PetFormValues>({
@@ -760,7 +1084,8 @@ export default function PetsPage() {
       nome: '', especie: '', raca: '', sexo: 'M', 
       tutorNome: '', tutorCpf: '', tutorEmail: '', tutorTelefone: '', 
       tutorEndereco: '', tutorCep: '', tutorBairro: '', tutorCidade: '', tutorUf: '',
-      healthPlanCode: '', healthPlanName: '' 
+      healthPlanCode: '', healthPlanName: '',
+      idRegistro: '', dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
     }
   });
 
@@ -788,7 +1113,8 @@ export default function PetsPage() {
         tutorUf: '',
         healthPlanCode: '',
         healthPlanName: '',
-        matricula: ''
+        matricula: '',
+        idRegistro: '', dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
       } as any);
       
       setIsCpfLocked(!!tutorCpf);
@@ -824,16 +1150,21 @@ export default function PetsPage() {
       form.setValue('tutorBairro', p.tutorBairro || '');
       form.setValue('tutorCidade', p.tutorCidade || '');
       form.setValue('tutorUf', p.tutorUf || '');
+      setPetsForCpf(foundPets);
+    } else {
+      setPetsForCpf([]);
     }
   };
 
   const handleClearCpfLookup = () => {
     setIsCpfLocked(false);
+    setPetsForCpf([]);
     form.reset({ 
       nome: '', especie: '', raca: '', sexo: 'M', 
       tutorNome: '', tutorCpf: '', tutorEmail: '', tutorTelefone: '', 
       tutorEndereco: '', tutorCep: '', tutorBairro: '', tutorCidade: '', tutorUf: '',
-      healthPlanCode: '', healthPlanName: '', matricula: ''
+      healthPlanCode: '', healthPlanName: '', matricula: '',
+      idRegistro: '', dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
     });
     setTimeout(() => tutorCpfInputRef.current?.focus(), 100);
   };
@@ -849,11 +1180,13 @@ export default function PetsPage() {
     if (result.success) {
       toast({ title: "Sucesso!", description: petId ? "Pet atualizado." : "Pet cadastrado." });
       setIsCpfLocked(false);
+      setPetsForCpf([]);
       form.reset({ 
         nome: '', especie: '', raca: '', sexo: 'M', 
         tutorNome: '', tutorCpf: '', tutorEmail: '', tutorTelefone: '', 
         tutorEndereco: '', tutorCep: '', tutorBairro: '', tutorCidade: '', tutorUf: '',
-        healthPlanCode: '', healthPlanName: '', matricula: ''
+        healthPlanCode: '', healthPlanName: '', matricula: '',
+        idRegistro: '', dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
       });
       
       if (!petId) {
@@ -883,6 +1216,7 @@ export default function PetsPage() {
           <PetList 
             pets={pets} 
             isLoaded={isLoaded && healthPlansLoaded} 
+            searchId={searchId}
             onEdit={(pet) => { setSelectedPet(pet); setIsEditDialogOpen(true); }} 
             onDelete={deletePet} 
           />
@@ -904,6 +1238,16 @@ export default function PetsPage() {
                 tutorCpfInputRef={tutorCpfInputRef}
                 isCpfLocked={isCpfLocked}
                 onClearLookup={handleClearCpfLookup}
+                petsForCpf={petsForCpf}
+                onSelectPetToEdit={(pet) => {
+                  setSelectedPet(pet);
+                  setIsEditDialogOpen(true);
+                  handleClearCpfLookup();
+                }}
+                onCancel={() => {
+                  handleClearCpfLookup();
+                  setActiveTab("list");
+                }}
               />
             </CardContent>
           </Card>

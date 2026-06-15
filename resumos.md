@@ -1,5 +1,19 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-06-15] - Workflow Rápido e Resiliência Dinâmica de Câmeras
+
+### 📸 Estabilização e Auto-Recuperação de Câmeras (Mobile/UX)
+- **Motor de Fuga Avançado**: Atualizamos o leitor de Pets e Materiais com um motor inteligente que ignora restrições de resolução caso a câmera escolhida (ex: lente Macro) retorne erro, forçando a inicialização da lente selecionada a qualquer custo.
+- **Auto-Recuperação de "Câmera em Uso"**: Implementado um delay adaptativo e tentativas automáticas (auto-retry). Se o hardware demorar a desligar uma câmera antiga (erro comum em Android), o sistema aguarda silenciosamente por 1 segundo e tenta de novo sozinho, evitando exibir a mensagem vermelha de erro.
+- **Troca Transparente via Select**: Aplicamos um "Atraso Inteligente" de 300ms quando a câmera é trocada via caixa de seleção (`<Select>`), simulando um clique de botão no momento exato, garantindo a transição de câmeras sem travar o processamento do React.
+- **Auto-Foco**: O sistema agora aponta automaticamente o teclado virtual / foco (`autoFocus`) para o botão "Gerenciar no Catálogo" assim que a leitura do Material é concluída.
+
+### ⚡ Identificação Rápida e Workflow de Dados
+- **Filtro Direto na Lista**: Substituímos o redirecionamento direto (que abria o Prontuário) por um redirecionamento paramétrico (`?searchId=...`) para as Listas Oficiais. O sistema agora isola e mostra apenas o item escaneado (Pet ou Material), criando uma visão rápida e enxuta.
+- **Links Rápidos e Retorno Ágil**: Criamos links de "Limpar Filtro" na lista para exibir tudo de novo e um botão "Ler Novo QR Code" que joga o usuário imediatamente de volta à tela da câmera sem passar pelo menu principal.
+- **Auto-preenchimento Sequencial de Materiais**: Implementamos a lógica anti-buraco: se o campo `ID do Material` (código de barras) for deixado em branco, o sistema automaticamente clona o sequencial do banco de dados (`codigo`), garantindo que sempre haja uma chave válida.
+- **Padronização Visual**: A página do Menu do Scanner foi migrada para usar o `PageTitle` padrão do PetMobile, consolidando o botão "Voltar" no canto correto da interface.
+
 ## [2026-06-13] - Otimização de Orçamentos e Laboratório de OCR (Tatuagens)
 
 ### 📄 Refinamentos no Orçamento e Impressão PDF
@@ -184,3 +198,17 @@ Implementamos um sistema de IDs altamente escalável e autoexplicativo:
 - **Busca de Exames (Fuse.js)**: Motor de busca aproximada para seleção manual.
 - **Setup Inicial Automático**: Rota `/api/setup` para auto-configuração do primeiro Master.
 - **Nomenclatura (Pet Context)**: Substituição de termos médicos por termos veterinários: "Paciente" ➔ **"Pet"**, "CPF" ➔ **"Chip/CPF"**, etc.
+
+---
+
+## [2026-06-14] - Crachás Térmicos e Dados Reprodutivos (POS-58)
+
+### 🖨️ Módulo de Impressão Térmica (Crachás 58mm)
+- **Integração com POS-58**: Criamos o sistema de impressão contínua nativa para impressoras térmicas genéricas de 58mm, configurando CSS estrito (48mm de área imprimível) para evitar cortes.
+- **Gerador de QRCode Vetorial (SVG)**: Substituímos o uso de bibliotecas de imagem por SVG nativo (qrcode.react), quebrando a limitação do Windows que impedia a impressão de imagens da internet em drivers térmicos. A impressão é agora instântanea, 100% legível por câmeras e enquadrada.
+- **UX de Impressão**: Criado layout profissional do crachá do Pet, incluindo botão Fechar Aba com fallback para fechar o _blank automaticamente, restaurando o histórico de navegação e conforto do usuário.
+
+### 🧬 Expansão do Cadastro de Pets (Histórico Reprodutivo)
+- **Novos Campos Vitais**: O formulário do Pet ganhou o controle avançado de Histórico Reprodutivo (Data da última cria, data de inseminação/cobertura, e quantidade de filhos).
+- **Adequação ao Zod e Supabase**: Atualizamos o schema de persistência (usePets), garantindo que pets fêmeas (ou machos) mantenham os metadados zootécnicos salvos de forma íntegra no banco de dados.
+- **Aprimoramento Visual (Botão Cancelar)**: Melhoramos o fluxo de preenchimento do formulário modal, dando ao usuário a opção imediata de desistir da edição, preservando a experiência em telas de celular.

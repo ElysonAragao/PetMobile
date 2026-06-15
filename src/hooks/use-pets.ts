@@ -27,6 +27,23 @@ const petSchema = z.object({
   matricula: z.string().optional().or(z.literal('')), 
   healthPlanCode: z.string().optional().or(z.literal('')),
   healthPlanName: z.string().optional().or(z.literal('')),
+  idRegistro: z.string().optional().or(z.literal('')),
+  dadosFamiliaresAtivo: z.boolean().optional().default(false),
+  paiNome: z.string().optional().or(z.literal('')),
+  paiRegistro: z.string().optional().or(z.literal('')),
+  paiInseminacao: z.boolean().optional().default(false),
+  semenRegistro: z.string().optional().or(z.literal('')),
+  maeNome: z.string().optional().or(z.literal('')),
+  maeRegistro: z.string().optional().or(z.literal('')),
+  paiPedigree: z.string().optional().or(z.literal('')),
+  maePedigree: z.string().optional().or(z.literal('')),
+  dadosMovimentacaoAtivo: z.boolean().optional().default(false),
+  pesagens: z.array(z.object({ data: z.string(), peso: z.string() })).optional().default([]),
+  statusReprodutivo: z.string().optional().or(z.literal('')),
+  dataUltimaCria: z.string().optional().or(z.literal('')),
+  dataInseminacao: z.string().optional().or(z.literal('')),
+  quantidadeFilhos: z.string().optional().or(z.literal('')),
+  filhos: z.array(z.object({ dataNascimento: z.string(), peso: z.string(), sexo: z.string() })).optional().default([]),
 });
 
 export const calculateAge = (birthDate: string): string => {
@@ -69,7 +86,7 @@ async function getNextPetCode(supabase: any): Promise<string> {
     .limit(1);
 
   if (error || !data || data.length === 0) {
-    return `${prefix}00001`;
+    return `${prefix}000001`;
   }
 
   const lastCode = data[0].cod_pet as string;
@@ -77,11 +94,11 @@ async function getNextPetCode(supabase: any): Promise<string> {
     const numberPart = parseInt(lastCode.substring(prefix.length));
     if (!isNaN(numberPart)) {
       const nextNumber = numberPart + 1;
-      return `${prefix}${nextNumber.toString().padStart(5, '0')}`;
+      return `${prefix}${nextNumber.toString().padStart(6, '0')}`;
     }
   }
 
-  return `${prefix}00001`; // fallback start
+  return `${prefix}000001`; // fallback start
 }
 
 export function usePets() {
@@ -127,6 +144,23 @@ export function usePets() {
           cod_pet, 
           health_plan_code, 
           health_plan_name, 
+          id_registro,
+          dados_familiares_ativo,
+          pai_nome,
+          pai_registro,
+          pai_inseminacao,
+          semen_registro,
+          mae_nome,
+          mae_registro,
+          pai_pedigree,
+          mae_pedigree,
+          dados_movimentacao_ativo,
+          pesagens,
+          status_reprodutivo,
+          data_ultima_cria,
+          data_inseminacao,
+          quantidade_filhos,
+          filhos,
           created_at
         `)
         .order('nome');
@@ -159,7 +193,24 @@ export function usePets() {
         tutorUf: row.tutor_uf,
         healthPlanCode: row.health_plan_code,
         healthPlanName: row.health_plan_name,
-        matricula: row.matricula
+        matricula: row.matricula,
+        idRegistro: row.id_registro,
+        dadosFamiliaresAtivo: row.dados_familiares_ativo,
+        paiNome: row.pai_nome,
+        paiRegistro: row.pai_registro,
+        paiInseminacao: row.pai_inseminacao,
+        semenRegistro: row.semen_registro,
+        maeNome: row.mae_nome,
+        maeRegistro: row.mae_registro,
+        paiPedigree: row.pai_pedigree,
+        maePedigree: row.mae_pedigree,
+        dadosMovimentacaoAtivo: row.dados_movimentacao_ativo,
+        pesagens: row.pesagens || [],
+        statusReprodutivo: row.status_reprodutivo,
+        dataUltimaCria: row.data_ultima_cria,
+        dataInseminacao: row.data_inseminacao,
+        quantidadeFilhos: row.quantidade_filhos,
+        filhos: row.filhos || []
       }));
 
       console.log(`Pets carregados: ${mappedData.length}`);
@@ -214,7 +265,24 @@ export function usePets() {
         tutorUf: row.tutor_uf,
         healthPlanCode: row.health_plan_code,
         healthPlanName: row.health_plan_name,
-        matricula: row.matricula
+        matricula: row.matricula,
+        idRegistro: row.id_registro,
+        dadosFamiliaresAtivo: row.dados_familiares_ativo,
+        paiNome: row.pai_nome,
+        paiRegistro: row.pai_registro,
+        paiInseminacao: row.pai_inseminacao,
+        semenRegistro: row.semen_registro,
+        maeNome: row.mae_nome,
+        maeRegistro: row.mae_registro,
+        paiPedigree: row.pai_pedigree,
+        maePedigree: row.mae_pedigree,
+        dadosMovimentacaoAtivo: row.dados_movimentacao_ativo,
+        pesagens: row.pesagens || [],
+        statusReprodutivo: row.status_reprodutivo,
+        dataUltimaCria: row.data_ultima_cria,
+        dataInseminacao: row.data_inseminacao,
+        quantidadeFilhos: row.quantidade_filhos,
+        filhos: row.filhos || []
     }));
   }, [supabase, selectedEmpresaId]);
 
@@ -247,6 +315,23 @@ export function usePets() {
         cod_pet: nextCode,
         health_plan_code: petData.healthPlanCode,
         health_plan_name: petData.healthPlanName,
+        id_registro: petData.idRegistro || null,
+        dados_familiares_ativo: petData.dadosFamiliaresAtivo || false,
+        pai_nome: petData.paiNome || null,
+        pai_registro: petData.paiRegistro || null,
+        pai_inseminacao: petData.paiInseminacao || false,
+        semen_registro: petData.semenRegistro || null,
+        mae_nome: petData.maeNome || null,
+        mae_registro: petData.maeRegistro || null,
+        pai_pedigree: petData.paiPedigree || null,
+        mae_pedigree: petData.maePedigree || null,
+        dados_movimentacao_ativo: petData.dadosMovimentacaoAtivo || false,
+        pesagens: petData.pesagens || [],
+        status_reprodutivo: petData.statusReprodutivo || null,
+        data_ultima_cria: petData.dataUltimaCria || null,
+        data_inseminacao: petData.dataInseminacao || null,
+        quantidade_filhos: petData.quantidadeFilhos || null,
+        filhos: petData.filhos || [],
         empresa_id: selectedEmpresaId
       };
 
@@ -296,6 +381,23 @@ export function usePets() {
 
       if (petData.healthPlanCode !== undefined) dataToUpdate.health_plan_code = petData.healthPlanCode;
       if (petData.healthPlanName !== undefined) dataToUpdate.health_plan_name = petData.healthPlanName;
+      if (petData.idRegistro !== undefined) dataToUpdate.id_registro = petData.idRegistro;
+      if (petData.dadosFamiliaresAtivo !== undefined) dataToUpdate.dados_familiares_ativo = petData.dadosFamiliaresAtivo;
+      if (petData.paiNome !== undefined) dataToUpdate.pai_nome = petData.paiNome;
+      if (petData.paiRegistro !== undefined) dataToUpdate.pai_registro = petData.paiRegistro;
+      if (petData.paiInseminacao !== undefined) dataToUpdate.pai_inseminacao = petData.paiInseminacao;
+      if (petData.semenRegistro !== undefined) dataToUpdate.semen_registro = petData.semenRegistro;
+      if (petData.maeNome !== undefined) dataToUpdate.mae_nome = petData.maeNome;
+      if (petData.maeRegistro !== undefined) dataToUpdate.mae_registro = petData.maeRegistro;
+      if (petData.paiPedigree !== undefined) dataToUpdate.pai_pedigree = petData.paiPedigree;
+      if (petData.maePedigree !== undefined) dataToUpdate.maePedigree = petData.maePedigree;
+      if (petData.dadosMovimentacaoAtivo !== undefined) dataToUpdate.dados_movimentacao_ativo = petData.dadosMovimentacaoAtivo;
+      if (petData.pesagens !== undefined) dataToUpdate.pesagens = petData.pesagens;
+      if (petData.statusReprodutivo !== undefined) dataToUpdate.status_reprodutivo = petData.statusReprodutivo;
+      if (petData.dataUltimaCria !== undefined) dataToUpdate.data_ultima_cria = petData.dataUltimaCria;
+      if (petData.dataInseminacao !== undefined) dataToUpdate.data_inseminacao = petData.dataInseminacao;
+      if (petData.quantidadeFilhos !== undefined) dataToUpdate.quantidade_filhos = petData.quantidadeFilhos;
+      if (petData.filhos !== undefined) dataToUpdate.filhos = petData.filhos;
 
       const { error: updateError } = await supabase
         .from('pet_pets')

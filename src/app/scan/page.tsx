@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface DecodedGuideData {
@@ -40,6 +41,7 @@ interface DecodedGuideData {
 
 export default function ScanPage() {
   const supabase = createClient();
+  const router = useRouter();
   const { user } = useSession();
   const { addLeitura } = useLeituras();
   const { createMovimento, isLoading: movementApiLoading } = useMovement();
@@ -222,6 +224,15 @@ export default function ScanPage() {
     setError(null);
 
     try {
+      // 1. Verifica se é um Crachá de Pet
+      if (scannedId.startsWith('PET:')) {
+        const petId = scannedId.replace('PET:', '');
+        toast({ title: "Crachá do Pet Lido!", description: "Redirecionando para o Prontuário...", variant: "default" });
+        router.push(`/pets/${petId}/prontuario`);
+        return; // Interrompe pois o router vai mudar de página
+      }
+
+      // 2. Fluxo Normal: Guia de Exame
       const fullData = await fetchGuiaData(scannedId);
       setDecodedData(fullData);
 

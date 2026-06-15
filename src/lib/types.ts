@@ -19,6 +19,27 @@ export interface Pet {
   healthPlanCode: string;
   healthPlanName: string;
   matricula?: string; // Matrícula do plano pet
+  idRegistro?: string; // Tatuagem
+  
+  // Dados Familiares
+  dadosFamiliaresAtivo?: boolean;
+  paiNome?: string;
+  paiRegistro?: string;
+  paiInseminacao?: boolean;
+  semenRegistro?: string;
+  maeNome?: string;
+  maeRegistro?: string;
+  paiPedigree?: string;
+  maePedigree?: string;
+  
+  // Dados de Movimentação/Saúde
+  dadosMovimentacaoAtivo?: boolean;
+  pesagens?: { data: string; peso: string }[];
+  statusReprodutivo?: string;
+  dataUltimaCria?: string;
+  dataInseminacao?: string;
+  quantidadeFilhos?: string;
+  filhos?: { dataNascimento: string; peso: string; sexo: string }[];
 }
 
 export interface Exam {
