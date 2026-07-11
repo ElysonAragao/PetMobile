@@ -96,7 +96,7 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     // Filtra apenas usuários que podem ser veterinários (MedicoVet ou Admin)
     const veterinarios = React.useMemo(() => {
         return (users || []).filter(u => 
-            u.status === 'Veterinário' || 
+            u.status === 'MedicoVet' || 
             u.status === 'Administrador' || 
             u.status === 'Master'
         ).map(u => ({

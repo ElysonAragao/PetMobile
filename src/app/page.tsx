@@ -47,7 +47,7 @@ function HomeContent() {
       description: 'Agende e consulte compromissos.',
       href: '/agenda',
       icon: <Calendar className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'Veterinário'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet'],
     },
     {
       title: 'Convênios Veterinários',
@@ -76,7 +76,7 @@ function HomeContent() {
       description: 'Gere guias de exames com QR Code para pacientes.',
       href: '/movement',
       icon: <Send className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet'],
     },
     {
       title: 'Leitura Médica',
@@ -105,7 +105,7 @@ function HomeContent() {
       description: 'Crie estimativas de valores para serviços.',
       href: '/orcamento',
       icon: <Calculator className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'Veterinário'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet'],
     },
     // L4
     {
@@ -120,14 +120,14 @@ function HomeContent() {
       description: 'Teste OCR em tatuagens de animais.',
       href: '/tattoo-scan',
       icon: <Scan className="h-8 w-8 text-indigo-500" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário', 'Leitor'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'Leitor'],
     },
     {
       title: 'Visualizar Câmeras',
       description: 'Visualize e teste suas câmeras.',
       href: '/cameras',
       icon: <Video className="h-8 w-8 text-blue-500" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário', 'Leitor'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'Leitor'],
     },
     // L5
     {

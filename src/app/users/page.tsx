@@ -12,6 +12,7 @@ import Link from 'next/link';
 
 import { useUsers, UserFormValues } from '@/hooks/use-user-management';
 import { useVeterinarios } from '@/hooks/use-veterinarios';
+import { Usuario } from '@/lib/types';
 import { forcarTrocaDeSenha } from '@/app/actions/usuarios';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,6 +42,7 @@ const userFormSchema = z.object({
   status: z.enum(['Administrador', 'Administrador Auxiliar', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
   dataValidade: z.date({ required_error: "Data de validade é obrigatória" }),
   telefone: z.string().optional().default(''),
+  medicosVinculados: z.array(z.string()).optional(),
 });
 
 const editUserSchema = userFormSchema.omit({ email: true });
@@ -301,11 +303,11 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: {
 
 
   async function onSubmit(values: z.infer<typeof userFormSchema | typeof editUserSchema>) {
-    values.medicosVinculados = medicosSelecionados;
+    (values as any).medicosVinculados = medicosSelecionados;
     console.log("SUBMITTING VALUES:", values);
     await onFormSubmit(values);
     if (!isEditMode) {
-      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "", medicosVinculados: [] });
+      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "" });
       setMedicosSelecionados([]);
     }
   }
@@ -569,7 +571,7 @@ export default function UsersPage() {
 
   const handleAddUser = async (values: z.infer<typeof userFormSchema>) => {
     toast({ title: "Aguarde", description: "Criando novo usuário..." });
-    const result = await addUser(values);
+    const result = await addUser(values as any);
     if (result.success) {
       toast({ title: "Sucesso!", description: "Usuário cadastrado com sucesso. Senha padrão: 123" });
       handleUserAdded();
@@ -580,7 +582,7 @@ export default function UsersPage() {
 
   const handleUpdateUser = async (values: z.infer<typeof editUserSchema>) => {
     if (!selectedUser) return;
-    const result = await updateUser(selectedUser.id, values);
+    const result = await updateUser(selectedUser.id, values as any);
     if (result.success) {
       toast({ title: "Sucesso!", description: "Usuário atualizado com sucesso." });
       setIsEditDialogOpen(false);

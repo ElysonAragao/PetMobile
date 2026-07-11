@@ -126,7 +126,7 @@ export function useAgenda() {
           .gte('data_fim', appDateStr);
 
         if (!blockError && bloqueios && bloqueios.length > 0) {
-          const isBlocked = bloqueios.some(b => {
+          const isBlocked = bloqueios.some((b: any) => {
             if (b.medico_id && b.medico_id !== agendaData.medicoId) return false;
             
             if (b.tipo_bloqueio === 'dia' || b.tipo_bloqueio === 'semana' || b.tipo_bloqueio === 'mes') return true;

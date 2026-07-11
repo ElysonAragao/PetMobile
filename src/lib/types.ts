@@ -94,10 +94,12 @@ export type UserRole =
   | 'Master' 
   | 'Administrador' 
   | 'Administrador Auxiliar'
-  | 'Veterinário' 
+  | 'MedicoVet' 
+  | 'MedicoVet Geral' 
   | 'Secretária' 
   | 'Secretária Geral'
   | 'Leitor' 
+  | 'Leitor Geral'
   | 'Relatórios';
 
 export interface Usuario {

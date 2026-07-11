@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer, Search } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 

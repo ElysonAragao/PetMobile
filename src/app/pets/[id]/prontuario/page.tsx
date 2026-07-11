@@ -290,7 +290,7 @@ export default function ProntuarioPage() {
     try {
         const { data, error } = await supabase.storage.from('prontuarios').list(prontId);
         if (data) {
-            setProntuarioImages(data.filter(f => f.name !== '.emptyFolderPlaceholder'));
+            setProntuarioImages(data.filter((f: any) => f.name !== '.emptyFolderPlaceholder'));
         }
     } catch (e) {
         console.error("Erro ao buscar imagens:", e);
@@ -397,7 +397,7 @@ export default function ProntuarioPage() {
 
       const vet = users.find(u => u.id === reciboData.medico_id);
       const vetName = vet?.nome || '';
-      const vetCrmv = vet?.crmv_uf ? `CRMV: ${vet.crmv_uf}` : '';
+      const vetCrmv = vet?.crmvUf ? `CRMV: ${vet.crmvUf}` : '';
       
       const extenso = numeroPorExtenso(numValor);
       const dataHoje = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
