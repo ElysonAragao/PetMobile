@@ -267,7 +267,7 @@ export function useAgenda() {
     status?: 'Agendado' | 'Cancelado' | 'Realizado' | 'Bloqueado';
     tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
     local?: string;
-  }): Promise<{ success: boolean; message?: string }> => {
+  }): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       const payload: any = {
         medico_id: agendaData.medicoId || null,
