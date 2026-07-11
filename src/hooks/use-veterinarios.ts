@@ -27,7 +27,7 @@ async function getNextVeterinarioCode(supabase: any): Promise<string> {
     const { data, error } = await supabase
         .from('pet_usuarios')
         .select('codigo')
-        .in('status', ['MedicoVet', 'MedicoVet Geral'])
+        .in('status', ['Veterinário', 'Veterinário Geral', 'MedicoVet', 'MedicoVet Geral'])
         .order('codigo', { ascending: false })
         .limit(1);
 
@@ -70,7 +70,7 @@ export function useVeterinarios() {
             let query = supabase
                 .from('pet_usuarios')
                 .select('id, empresa_id, nome, crmv_uf, especialidade, email, telefone, codVet:codigo, created_at, validade_acesso:validade, prontuario_liberado, validade_prontuario')
-                .in('status', ['MedicoVet', 'MedicoVet Geral'])
+                .in('status', ['Veterinário', 'Veterinário Geral', 'MedicoVet', 'MedicoVet Geral'])
                 .not('nome', 'is', null)
                 .neq('nome', '')
                 .not('crmv_uf', 'is', null)
@@ -124,7 +124,7 @@ export function useVeterinarios() {
                 .from('pet_usuarios')
                 .select('id')
                 .eq('crmv_uf', vetData.crmv)
-                .in('status', ['MedicoVet', 'MedicoVet Geral'])
+                .in('status', ['Veterinário', 'Veterinário Geral', 'MedicoVet', 'MedicoVet Geral'])
                 .limit(1);
 
             if (existingData && existingData.length > 0) {
@@ -232,7 +232,7 @@ export function useVeterinarios() {
                     userId: vetId,
                     userData: {
                         nome: dataToUpdate.nome,
-                        status: currentUserData?.status || 'MedicoVet',
+                        status: currentUserData?.status || 'Veterinário',
                         validade: vetData.validade_acesso !== undefined ? (vetData.validade_acesso || null) : (currentUserData?.validade || null),
                         crmv_uf: dataToUpdate.crmv_uf,
                         especialidade: dataToUpdate.especialidade,
@@ -264,7 +264,7 @@ export function useVeterinarios() {
                 .from('pet_usuarios')
                 .delete()
                 .eq('id', vetId)
-                .in('status', ['MedicoVet', 'MedicoVet Geral']);
+                .in('status', ['Veterinário', 'Veterinário Geral', 'MedicoVet', 'MedicoVet Geral']);
 
             if (error) throw error;
             fetchVeterinarios();

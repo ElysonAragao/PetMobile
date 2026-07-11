@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Beaker, Loader2, AlertTriangle, Printer, Info, PawPrint, Undo2, ScanLine, Home } from 'lucide-react';
+import { Beaker, Loader2, AlertTriangle, Printer, Info, PawPrint, Undo2, ScanLine, Home, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { Button } from '@/components/ui/button';
@@ -140,125 +140,75 @@ function PrintContent() {
 
     return (
         <div className="bg-white text-black max-w-4xl mx-auto p-8 print-container font-sans">
-            <header className="flex justify-between items-center mb-4 no-print border-b pb-4">
-                <h1 className="text-xl font-bold text-primary flex items-center gap-2"><PawPrint className="w-6 h-6" /> PetMobile</h1>
+            <header className="flex justify-between items-center mb-8 no-print border-b pb-4">
+                <h1 className="text-xl font-bold text-blue-600">Visualização da Guia</h1>
                 <div className="flex gap-3">
-                    <Button onClick={handlePrint} className="font-bold text-base bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all">
-                        <Printer className="mr-2 h-5 w-5" /> Gerar PDF / Imprimir
+                    <Button onClick={handlePrint} className="font-bold text-sm bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-all">
+                        <Printer className="mr-2 h-4 w-4" /> Gerar PDF / Imprimir
                     </Button>
-                    <Button onClick={handleClose} className="font-bold text-base border-2 hover:bg-gray-50 transition-all font-sans tracking-wide" variant="outline">
-                        <Undo2 className="mr-2 h-5 w-5" /> VOLTAR
+                    <Button onClick={handleClose} className="font-bold text-sm bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all uppercase" variant="outline">
+                        <Undo2 className="mr-2 h-4 w-4" /> VOLTAR
                     </Button>
                 </div>
             </header>
 
-            <div className="no-print my-6">
-                <Alert variant="default" className="text-left"><Info className="h-4 w-4" /><AlertTitle>Como Salvar ou Enviar?</AlertTitle><AlertDescription>Escolha &quot;Salvar como PDF&quot; na janela de impressão para salvar no seu dispositivo.</AlertDescription></Alert>
-            </div>
+            <h1 className="text-center text-[16pt] font-bold mb-8">{titulo}</h1>
 
-            <h1 className="text-center text-2xl font-black mb-1 uppercase tracking-tight">{titulo}</h1>
-            <p className="text-center text-[9pt] text-gray-500 mb-6 italic">{subTitulo}</p>
+            <section className="mb-8">
+                <div className="flex justify-between items-end mb-1 text-[10pt] font-bold text-gray-900">
+                    <div>Data: {formatData(guia.data)}, {guia.data ? new Date(guia.data).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : ''}</div>
+                    <div>Guia Original: {guia.movimentoId}</div>
+                </div>
+                <hr className="border-black border-t-[1.5px] mb-4" />
 
-            <section className="flex justify-between items-end mb-2 border-b-2 border-black pb-3 pt-2">
-                {isLeitura ? (
-                    <div className="w-full space-y-2">
-                        <div className="bg-black text-white px-3 py-1.5 text-sm font-bold inline-block rounded-sm">
-                            Cód_Leitura: {codLeitura || '-'} - Data Leitura: {formatData(dataLeituraParam)}
+                <div className="flex justify-between items-center mb-4">
+                    <div className="w-[70%] text-[10pt] font-bold space-y-2 text-gray-900">
+                        <div>Paciente: <span className="font-normal">{guia.pet.nome}</span></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>Data Nasc.: <span className="font-normal">{guia.pet.dataNascimento ? new Date(guia.pet.dataNascimento).toLocaleDateString('pt-BR') : '-'}</span></div>
+                            <div>Idade: <span className="font-normal">{guia.pet.idade || '-'}</span></div>
                         </div>
-                        <div className="text-[11pt] font-bold text-gray-800 uppercase tracking-widest pl-1">
-                            Referente a: {guia.movimentoId}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>Espécie/Sexo: <span className="font-normal">{guia.pet.especie} / {guia.pet.sexo || '-'}</span></div>
+                            <div>Raça: <span className="font-normal">{guia.pet.raca || '-'}</span></div>
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>Tutor: <span className="font-normal">{guia.pet.tutorNome}</span></div>
+                            <div>CPF: <span className="font-normal">{guia.pet.tutorCpf || '-'}</span></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>Telefones: <span className="font-normal">{guia.pet.tutorTelefone || 'N/A'}</span></div>
+                            <div>Plano: <span className="font-normal">{guia.pet.healthPlanName || 'N/A'}</span></div>
+                        </div>
+                        <div>Cód. Pet: <span className="font-normal">{guia.pet.codPet || '-'}</span></div>
+                        <div>Médico(a): <span className="font-normal">Dr(a). {guia.veterinario.nome} (CRMV: {guia.veterinario.crmv || '-'})</span></div>
                     </div>
-                ) : (
-                    <>
-                        <div className="space-y-0.5">
-                            <div className="text-[10pt]">
-                                <strong>Data da Solicitação:</strong> {formatData(guia.data)}
+                    
+                    <div className="w-[30%] flex flex-col items-end justify-center pt-2 pr-4">
+                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(guia.movimentoId)}`} width={130} height={130} alt="QR Code" className="border-4 p-1 border-black" />
+                        <div className="text-[7pt] font-bold mt-1 text-center font-sans tracking-tight">{guia.movimentoId}</div>
+                    </div>
+                </div>
+            </section>
+            
+            <section>
+                <hr className="border-black border-t-[1.5px] mb-2" />
+                <h2 className="text-[12pt] font-bold flex items-center gap-2 mb-2 text-gray-900">
+                    <FileText className="w-5 h-5" /> Exames Solicitados ({guia.exams.length})
+                </h2>
+                <hr className="border-black border-t-[1.5px] mb-4" />
+
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-[9pt] font-bold text-gray-900 pr-4">
+                    {guia.exams.map((exam: any) => (
+                        <div key={exam.id} className="flex flex-col break-inside-avoid">
+                            <div className="flex items-start gap-1.5 leading-snug">
+                                <span className="text-[14pt] leading-[0.5] mt-1.5">•</span> 
+                                <span>{exam.id_exame || ''} - {exam.nome}</span>
                             </div>
+                            {exam.descricao && <div className="text-gray-500 font-normal text-[7.5pt] ml-4 mt-0.5 italic leading-tight">{exam.descricao}</div>}
                         </div>
-                        <div className="text-right">
-                            <div className="text-[9pt] text-gray-400 font-bold uppercase">Referência</div>
-                            <div className="text-lg font-mono font-bold leading-tight">{guia.movimentoId}</div>
-                        </div>
-                    </>
-                )}
-            </section>
-            {(guia.pet?.healthPlanName || guia.pet?.healthPlanCode) && (
-                <section className="mb-2 border-b-2 border-black pb-2 text-sm font-bold flex justify-between items-center bg-gray-50 px-2 py-1">
-                    <div>Plano de Saúde: <span className="text-primary">{guia.pet.healthPlanName || 'Não Informado'}</span></div>
-                    {guia.pet.healthPlanCode && <div>ID Plano: <span className="text-primary">{guia.pet.healthPlanCode}</span></div>}
-                </section>
-            )}
-
-            <section className="mb-4 text-[10.5pt] border-y border-black py-1 px-0 space-y-1">
-                <div className="space-y-0.5">
-                    <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Dados do Animal / Pet</div>
-                    <div className="grid grid-cols-12 gap-x-2">
-                        <div className="col-span-5"><strong>NOME:</strong> {guia.pet.nome}</div>
-                        <div className="col-span-3"><strong>NASC.:</strong> {guia.pet.dataNascimento ? new Date(guia.pet.dataNascimento).toLocaleDateString('pt-BR') : '-'}</div>
-                        <div className="col-span-4"><strong>IDADE:</strong> {guia.pet.idade || '-'}</div>
-                    </div>
-                    <div className="grid grid-cols-12 gap-x-2 border-b border-dotted border-gray-400 pb-0.5">
-                        <div className="col-span-5"><strong>ESPÉCIE:</strong> {guia.pet.especie}</div>
-                        <div className="col-span-3"><strong>RAÇA:</strong> {guia.pet.raca || '-'}</div>
-                        <div className="col-span-4"><strong>CÓD. PET:</strong> {guia.pet.codPet || '-'}</div>
-                    </div>
+                    ))}
                 </div>
-
-                <div className="space-y-0.5">
-                    <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Dados do Responsável / Tutor</div>
-                    <div className="grid grid-cols-12 gap-x-2 border-b border-dotted border-gray-400 pb-0.5">
-                        <div className="col-span-5"><strong>TUTOR:</strong> {guia.pet.tutorNome}</div>
-                        <div className="col-span-3"><strong>CPF:</strong> {guia.pet.tutorCpf || '-'}</div>
-                        <div className="col-span-4"><strong>TELEFONE:</strong> {guia.pet.tutorTelefone || '-'}</div>
-                    </div>
-                </div>
-
-                <div className="space-y-0.5">
-                    <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Solicitação Médica</div>
-                    <div className="grid grid-cols-12 gap-x-2">
-                        <div className="col-span-8"><strong>MEDICO(A) VETERINÁRIO(A):</strong> {guia.veterinario.nome}</div>
-                        <div className="col-span-4"><strong>CRMV/UF:</strong> {guia.veterinario.crmv}</div>
-                    </div>
-                </div>
-            </section>
-
-            <section className="flex flex-col items-center justify-center my-8">
-                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(guia.movimentoId)}`} width={160} height={160} alt="QR Code" className="border-4 p-1 rounded-sm border-black" />
-            </section>
-
-            <section className="border-t border-black pt-3">
-                {examsUrgency.length > 0 && (
-                    <div className="mb-6">
-                        <h2 className="text-lg font-bold mb-2 flex items-center gap-2 text-red-700">
-                            🚨 Exames de Urgência ({examsUrgency.length})
-                        </h2>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 bg-red-50/50 p-2 rounded-md border border-red-100">
-                            {examsUrgency.map((exam: any) => (
-                                <div key={exam.id} className="text-sm">
-                                    • <strong>{exam.id_exame || ''}</strong> - {exam.nome}
-                                    {exam.descricao && <p className="text-[10pt] text-gray-700 italic ml-4">{exam.descricao}</p>}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {examsNormal.length > 0 && (
-                    <div>
-                        <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-                            <Beaker size={20} /> Exames Normais ({examsNormal.length})
-                        </h2>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                            {examsNormal.map((exam: any) => (
-                                <div key={exam.id} className="text-sm">
-                                    • <strong>{exam.id_exame || ''}</strong> - {exam.nome}
-                                    {exam.descricao && <p className="text-[10pt] text-gray-600 italic ml-4">{exam.descricao}</p>}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </section>
 
             <style jsx global>{`

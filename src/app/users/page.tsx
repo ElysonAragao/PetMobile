@@ -10,8 +10,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 
-import { Usuario } from '@/lib/types';
 import { useUsers, UserFormValues } from '@/hooks/use-user-management';
+import { useVeterinarios } from '@/hooks/use-veterinarios';
 import { forcarTrocaDeSenha } from '@/app/actions/usuarios';
 import { PageTitle } from '@/components/layout/page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -198,15 +199,53 @@ function UserList({ users, isLoaded, onEdit, onDelete }: { users: Usuario[], isL
   );
 }
 
-function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: { onFormSubmit: (values: any) => Promise<any>, isEditMode?: boolean, initialData?: Partial<Usuario & { dataValidade: Date | string }>, onCancel?: () => void }) {
+function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: { onFormSubmit: (values: any) => Promise<any>, isEditMode?: boolean, initialData?: Partial<Usuario & { dataValidade: Date | string, vinculos?: { veterinario_id: string }[] }>, onCancel?: () => void }) {
   const { user: currentUser } = useSession();
+  const { veterinarios } = useVeterinarios();
+  const [searchTerm, setSearchTerm] = React.useState("");
+
+  const initialMedicos = React.useMemo(() => {
+    return initialData?.vinculos?.map((v: any) => v.veterinario_id) || [];
+  }, [initialData]);
+  const [medicosSelecionados, setMedicosSelecionados] = React.useState<string[]>(initialMedicos);
 
   const form = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(isEditMode ? editUserSchema : userFormSchema) as any,
-    defaultValues: { nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "" },
+    defaultValues: React.useMemo(() => {
+      let normalizedStatus = initialData?.status as any;
+      if (typeof normalizedStatus === 'string') {
+        const lower = normalizedStatus.trim().toLowerCase();
+        if (lower === 'secretaria' || lower === 'secretária') normalizedStatus = 'Secretária';
+        else if (lower === 'secretaria geral' || lower === 'secretária geral') normalizedStatus = 'Secretária Geral';
+        else if (['médico', 'veterinário', 'medico', 'veterinario', 'medicovet'].includes(lower)) normalizedStatus = 'MedicoVet';
+        else if (['médico geral', 'veterinário geral', 'medico geral', 'veterinario geral', 'medicovet geral'].includes(lower)) normalizedStatus = 'MedicoVet Geral';
+      }
+
+      let parsedDate = undefined;
+      if (initialData?.dataValidade) {
+        parsedDate = typeof initialData.dataValidade === 'string' 
+          ? parse(initialData.dataValidade, 'yyyy-MM-dd', new Date()) 
+          : initialData.dataValidade as Date;
+      }
+
+      return {
+        nome: initialData?.nome || "",
+        email: initialData?.email || "",
+        status: normalizedStatus || undefined,
+        dataValidade: parsedDate,
+        telefone: initialData?.telefone || "",
+        medicosVinculados: initialMedicos
+      };
+    }, [initialData, initialMedicos]),
   });
 
   const status = form.watch('status');
+  const isSecretaria = status === 'Secretária' || status === 'Secretária Geral';
+
+  const filteredVets = React.useMemo(() => {
+      if (!searchTerm) return veterinarios;
+      return veterinarios.filter(v => v.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [veterinarios, searchTerm]);
 
   // Roles disponíveis baseado no usuário logado
   const availableRoles: { value: UserRole; label: string }[] = React.useMemo(() => {
@@ -259,41 +298,15 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: {
   }, [status, form, isEditMode, maxValidityDate]);
 
 
-  React.useEffect(() => {
-    if (isEditMode && initialData) {
-      let parsedDate = new Date(); // Default fallback
-      if (initialData.dataValidade && typeof initialData.dataValidade === 'string') {
-        try {
-          const parsed = parse(initialData.dataValidade, 'yyyy-MM-dd', new Date());
-          if (!isNaN(parsed.getTime())) {
-            parsedDate = parsed;
-          }
-        } catch (e) {
-          // Fallback to `new Date()` is already set
-        }
-      } else if ((initialData.dataValidade as unknown) instanceof Date) {
-        // If it's already a date, use it directly
-        parsedDate = initialData.dataValidade as unknown as Date;
-      }
 
-      form.reset({
-        nome: initialData.nome,
-        status: initialData.status as any,
-        dataValidade: parsedDate,
-        email: initialData.email,
-        telefone: initialData.telefone || ""
-      });
-    } else {
-      form.reset({
-        nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: ""
-      })
-    }
-  }, [initialData, isEditMode, form]);
 
   async function onSubmit(values: z.infer<typeof userFormSchema | typeof editUserSchema>) {
+    values.medicosVinculados = medicosSelecionados;
+    console.log("SUBMITTING VALUES:", values);
     await onFormSubmit(values);
     if (!isEditMode) {
-      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "" });
+      form.reset({ nome: "", email: "", status: undefined as any, dataValidade: undefined, telefone: "", medicosVinculados: [] });
+      setMedicosSelecionados([]);
     }
   }
 
@@ -397,6 +410,62 @@ function UserForm({ onFormSubmit, isEditMode = false, initialData, onCancel }: {
             )}
           />
         </div>
+
+        {isSecretaria && (
+          <Card className="border-primary/10 shadow-sm mt-4 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Vincular Médicos (Acesso de Secretária)</CardTitle>
+              <CardDescription className="text-xs">
+                Selecione os médicos para os quais esta secretária poderá visualizar a agenda e emitir documentos no prontuário.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Input 
+                placeholder="Buscar médico por nome..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="mb-4 h-9 shadow-sm"
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[200px] overflow-y-auto pr-2">
+                {filteredVets.map((item) => (
+                  <FormField
+                    key={item.id}
+                    control={form.control}
+                    name="medicosVinculados"
+                    render={({ field }) => {
+                      return (
+                        <FormItem
+                          key={item.id}
+                          className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-2 shadow-sm bg-white"
+                        >
+                          <FormControl>
+                            <Checkbox
+                              checked={medicosSelecionados.includes(item.id)}
+                              onCheckedChange={(checked) => {
+                                setMedicosSelecionados(prev => {
+                                  if (checked) return [...prev, item.id];
+                                  return prev.filter(v => v !== item.id);
+                                });
+                              }}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="font-normal cursor-pointer text-sm">
+                              {item.nome}
+                            </FormLabel>
+                          </div>
+                        </FormItem>
+                      )
+                    }}
+                  />
+                ))}
+                {filteredVets.length === 0 && (
+                    <div className="col-span-full text-xs text-muted-foreground py-2 text-center">Nenhum médico encontrado.</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col md:flex-row gap-3">
           <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
@@ -555,7 +624,9 @@ export default function UsersPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => { if (!isOpen) setSelectedUser(null); setIsEditDialogOpen(isOpen); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Usuário</DialogTitle><DialogDescription>Modifique os dados do usuário abaixo. O e-mail não pode ser alterado.</DialogDescription></DialogHeader>
-          <UserForm onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} onCancel={() => setIsEditDialogOpen(false)} />
+          {selectedUser && (
+            <UserForm key={selectedUser.id} onFormSubmit={handleUpdateUser} isEditMode={true} initialData={selectedUser || undefined} onCancel={() => setIsEditDialogOpen(false)} />
+          )}
           {selectedUser && (
              <BotaoMudarSenha usuarioIdAlvo={selectedUser.id} />
           )}

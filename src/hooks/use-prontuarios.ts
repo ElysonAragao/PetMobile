@@ -9,6 +9,7 @@ export interface Prontuario {
   medico_id: string | null;
   data_atendimento: string;
   tipo_atendimento: 'Consulta' | 'Exame' | 'Procedimento' | 'Retorno';
+  queixa_principal: string | null;
   descricao_livre: string | null;
   prescricao_medica: string | null;
   status_retorno: 'Ativo' | 'Expirado' | 'Concluído';
@@ -105,6 +106,7 @@ export function useProntuarios(petId?: string) {
         medico_id: prontuarioInfo.medico_id ? prontuarioInfo.medico_id : null,
         autor_registro_id: user?.id,
         codigo_prontuario: nextCode,
+        queixa_principal: prontuarioInfo.queixa_principal ? prontuarioInfo.queixa_principal : null,
         descricao_livre: prontuarioInfo.descricao_livre ? prontuarioInfo.descricao_livre : null,
         prescricao_medica: prontuarioInfo.prescricao_medica ? prontuarioInfo.prescricao_medica : null,
         data_atendimento: novaDataAtendimento,

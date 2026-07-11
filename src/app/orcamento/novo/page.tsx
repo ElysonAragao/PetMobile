@@ -28,10 +28,14 @@ import { usePrecos } from '@/hooks/use-precos';
 import { useSession } from '@/context/session-context';
 import { useOrcamentos } from '@/hooks/use-orcamentos';
 import { useToast } from '@/hooks/use-toast';
+import { usePets } from '@/hooks/use-pets';
 
 const orcamentoSchema = z.object({
-  nomePessoa: z.string().min(1, 'O nome do tutor/cliente é obrigatório.'),
+  petId: z.string().default('avulso'),
+  nomePessoa: z.string().min(1, 'O nome do paciente/tutor é obrigatório.'),
+  cpf: z.string().optional(),
   telefone: z.string().optional(),
+  email: z.string().optional(),
   cpl: z.string().optional(),
   planoId: z.string().min(1, 'Obrigatório selecionar um plano/convênio.'),
   validadeDias: z.string().default('15'),
@@ -53,12 +57,14 @@ export default function OrcamentoPage() {
   const { precos, fetchPrecos } = usePrecos();
   const { saveOrcamento, getNextOrcamentoCode } = useOrcamentos();
   const { toast } = useToast();
+  const { pets, isLoaded: petsLoaded } = usePets();
   
   const [searchTermExams, setSearchTermExams] = React.useState('');
   const [searchTermMateriais, setSearchTermMateriais] = React.useState('');
   const [selectedCategoriaMaterial, setSelectedCategoriaMaterial] = React.useState('all');
   const [materialQuantities, setMaterialQuantities] = React.useState<Record<string, number>>({});
   const [empresaCodigo, setEmpresaCodigo] = React.useState('000');
+  const [activeTab, setActiveTab] = React.useState<'exames' | 'materiais'>('exames');
   
   const [generatedOrcamento, setGeneratedOrcamento] = React.useState<any | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -66,8 +72,11 @@ export default function OrcamentoPage() {
   const form = useForm<OrcamentoFormValues>({
     resolver: zodResolver(orcamentoSchema),
     defaultValues: {
+      petId: 'avulso',
       nomePessoa: '',
+      cpf: '',
       telefone: '',
+      email: '',
       cpl: '',
       planoId: '',
       validadeDias: '15',
@@ -76,9 +85,29 @@ export default function OrcamentoPage() {
     },
   });
 
+  const selectedPetId = form.watch('petId');
   const selectedPlanoId = form.watch('planoId');
   const selectedExamIds = form.watch('examIds') || [];
   const selectedMaterialIds = form.watch('materialIds') || [];
+
+  React.useEffect(() => {
+      if (selectedPetId && selectedPetId !== 'avulso') {
+          const pet = pets.find(p => p.id === selectedPetId);
+          if (pet) {
+              form.setValue('nomePessoa', pet.nome || '');
+              form.setValue('cpf', pet.tutorCpf || '');
+              form.setValue('telefone', pet.tutorTelefone || '');
+              
+              const plan = healthPlans.find(p => p.nome === pet.healthPlanName);
+              if (plan) form.setValue('planoId', plan.id);
+          }
+      } else if (selectedPetId === 'avulso') {
+          form.setValue('nomePessoa', '');
+          form.setValue('cpf', '');
+          form.setValue('telefone', '');
+          form.setValue('planoId', '');
+      }
+  }, [selectedPetId, pets, healthPlans, form]);
 
   React.useEffect(() => {
     async function getEmpresaCode() {
@@ -144,7 +173,9 @@ export default function OrcamentoPage() {
       validade: validadeDate.toISOString(),
       cliente: {
         nome: values.nomePessoa,
+        cpf: values.cpf,
         telefone: values.telefone,
+        email: values.email,
         cpl: values.cpl,
       },
       plano: planoSelecionado?.nome || 'Particular',
@@ -216,7 +247,7 @@ export default function OrcamentoPage() {
     'Equipamento', 'Insumo', 'Outro'
   ];
 
-  if (!examsLoaded || !materiaisLoaded || !plansLoaded) {
+  if (!examsLoaded || !materiaisLoaded || !plansLoaded || !petsLoaded) {
     return <div className="p-8 text-center"><Calculator className="w-8 h-8 animate-pulse mx-auto" /></div>;
   }
 
@@ -248,89 +279,117 @@ export default function OrcamentoPage() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <Card>
               <CardHeader>
-                <CardTitle>Dados do Cliente</CardTitle>
+                <CardTitle>Paciente/Cliente</CardTitle>
                 <CardDescription>Informações básicas para emissão do orçamento.</CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                <FormField control={form.control} name="nomePessoa" render={({ field }) => (
-                  <FormItem className="md:col-span-2">
-                    <FormLabel>Nome do Cliente / Tutor</FormLabel>
-                    <FormControl><Input placeholder="Ex: João da Silva" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="telefone" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Telefone</FormLabel>
-                    <FormControl><Input placeholder="Ex: (11) 99999-9999" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="cpl" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Complemento (CPL)</FormLabel>
-                    <FormControl><Input placeholder="Ex: Apto 101" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="planoId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plano de Saúde / Convênio</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {healthPlans.map(plan => (
-                          <SelectItem key={plan.id} value={plan.id}>{plan.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="validadeDias" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Validade (Dias)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="5">5 Dias</SelectItem>
-                        <SelectItem value="10">10 Dias</SelectItem>
-                        <SelectItem value="15">15 Dias</SelectItem>
-                        <SelectItem value="30">30 Dias</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <FormField control={form.control} name="petId" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>Selecionar Paciente Cadastrado</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="avulso">-- Paciente Avulso (Não cadastrado) --</SelectItem>
+                            {pets.map(pet => (
+                              <SelectItem key={pet.id} value={pet.id}>{pet.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="nomePessoa" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>Nome do Paciente *</FormLabel>
+                        <FormControl><Input placeholder="Nome completo" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="cpf" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>CPF</FormLabel>
+                        <FormControl><Input placeholder="000.000.000-00" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="telefone" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>Telefone / WhatsApp</FormLabel>
+                        <FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <FormField control={form.control} name="email" render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Email</FormLabel>
+                        <FormControl><Input placeholder="email@exemplo.com" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="planoId" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>Plano de Saúde / Convênio</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {healthPlans.map(plan => (
+                              <SelectItem key={plan.id} value={plan.id}>{plan.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="validadeDias" render={({ field }) => (
+                      <FormItem className="md:col-span-1">
+                        <FormLabel>Validade (Dias)</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="5">5 Dias</SelectItem>
+                            <SelectItem value="10">10 Dias</SelectItem>
+                            <SelectItem value="15">15 Dias</SelectItem>
+                            <SelectItem value="30">30 Dias</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                </div>
               </CardContent>
             </Card>
 
-            <Tabs defaultValue="exames" className="w-full">
-              <div className="flex flex-col md:flex-row items-center bg-muted/20 p-2 rounded-xl border relative justify-center">
-                <TabsList className="bg-transparent border-none h-auto z-10">
-                  <TabsTrigger value="exames" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary px-8 py-2.5 text-base font-bold shadow-sm">
-                    <Beaker className="mr-2 h-5 w-5" /> Exames ({selectedExamIds.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="materiais" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary px-8 py-2.5 text-base font-bold shadow-sm">
-                    <Box className="mr-2 h-5 w-5" /> Materiais ({selectedMaterialIds.length})
-                  </TabsTrigger>
-                </TabsList>
-                
-                <div className="md:absolute md:right-2 mt-4 md:mt-0 w-full md:w-auto z-20">
-                  <Button type="submit" size="default" disabled={isSaving || (selectedExamIds.length === 0 && selectedMaterialIds.length === 0)} className="shadow-md shadow-primary/20 bg-primary hover:bg-primary/90 w-full md:w-auto h-10 px-6 font-semibold">
-                    <QrCode className="mr-2 h-4 w-4" /> Gerar QR Code
-                  </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle>Itens do Orçamento</CardTitle>
+                <CardDescription>Adicione exames e materiais ao orçamento.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center gap-6 p-4 bg-muted/10 rounded-lg border">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" checked={activeTab === 'exames'} onChange={() => setActiveTab('exames')} className="w-4 h-4 text-primary accent-primary" />
+                        <span className="font-medium text-sm">Exame/Serviço {selectedExamIds.length > 0 && `(${selectedExamIds.length})`}</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" checked={activeTab === 'materiais'} onChange={() => setActiveTab('materiais')} className="w-4 h-4 text-primary accent-primary" />
+                        <span className="font-medium text-sm">Material {selectedMaterialIds.length > 0 && `(${selectedMaterialIds.length})`}</span>
+                    </label>
                 </div>
-              </div>
-              
-              <TabsContent value="exames" className="mt-0">
-                <Card className="flex flex-col h-[500px]">
-                  <CardHeader className="pb-3">
-                    <div className="relative mt-2">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Buscar exame..." className="pl-8" value={searchTermExams} onChange={e => setSearchTermExams(e.target.value)} />
+                
+                {activeTab === 'exames' && (
+                <div className="flex flex-col border rounded-lg h-[500px]">
+                  <div className="p-4 border-b bg-muted/5">
+                    <div className="flex flex-col gap-2">
+                      <span className="font-bold text-sm flex items-center gap-2"><Beaker className="w-4 h-4"/> Exames</span>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Filtrar exames por nome ou ID..." className="pl-9 h-10" value={searchTermExams} onChange={e => setSearchTermExams(e.target.value)} />
+                      </div>
                     </div>
-                  </CardHeader>
+                  </div>
                   <CardContent className="flex-1 overflow-hidden p-0">
                     <ScrollArea className="h-full px-6">
                       <FormField control={form.control} name="examIds" render={() => (
@@ -372,34 +431,35 @@ export default function OrcamentoPage() {
                       )} />
                     </ScrollArea>
                   </CardContent>
-                  <CardFooter className="bg-muted/10 border-t justify-end p-4">
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Total Exames</p>
-                      <p className="text-lg font-bold text-primary">R$ {examesTotal.toFixed(2)}</p>
-                    </div>
-                  </CardFooter>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="materiais" className="mt-4">
-                <Card className="flex flex-col h-[500px]">
-                  <CardHeader className="pb-3">
-                    <div className="flex flex-col md:flex-row gap-2 mt-2">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Buscar material..." className="pl-8" value={searchTermMateriais} onChange={e => setSearchTermMateriais(e.target.value)} />
+                  <div className="bg-muted/10 border-t justify-end p-4 text-right">
+                    <p className="text-sm text-muted-foreground">Total Exames</p>
+                    <p className="text-lg font-bold text-primary">R$ {examesTotal.toFixed(2)}</p>
+                  </div>
+                </div>
+                )}
+                
+                {activeTab === 'materiais' && (
+                <div className="flex flex-col border rounded-lg h-[500px]">
+                  <div className="p-4 border-b bg-muted/5">
+                    <div className="flex flex-col gap-2">
+                      <span className="font-bold text-sm flex items-center gap-2"><Box className="w-4 h-4"/> Materiais</span>
+                      <div className="flex flex-col md:flex-row gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input placeholder="Buscar material..." className="pl-9 h-10" value={searchTermMateriais} onChange={e => setSearchTermMateriais(e.target.value)} />
+                        </div>
+                        <Select value={selectedCategoriaMaterial} onValueChange={setSelectedCategoriaMaterial}>
+                          <SelectTrigger className="h-10 md:w-[200px]">
+                            <SelectValue placeholder="Categoria" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            {categoriasMateriais.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Select value={selectedCategoriaMaterial} onValueChange={setSelectedCategoriaMaterial}>
-                        <SelectTrigger className="h-10 md:w-[200px]">
-                          <SelectValue placeholder="Categoria" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas</SelectItem>
-                          {categoriasMateriais.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
                     </div>
-                  </CardHeader>
+                  </div>
                   <CardContent className="flex-1 overflow-hidden p-0">
                     <ScrollArea className="h-full px-6">
                       <FormField control={form.control} name="materialIds" render={() => (
@@ -461,19 +521,23 @@ export default function OrcamentoPage() {
                       )} />
                     </ScrollArea>
                   </CardContent>
-                  <CardFooter className="bg-muted/10 border-t justify-end p-4">
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Total Materiais</p>
-                      <p className="text-lg font-bold text-primary">R$ {materiaisTotal.toFixed(2)}</p>
-                    </div>
-                  </CardFooter>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                  <div className="bg-muted/10 border-t justify-end p-4 text-right">
+                    <p className="text-sm text-muted-foreground">Total Materiais</p>
+                    <p className="text-lg font-bold text-primary">R$ {materiaisTotal.toFixed(2)}</p>
+                  </div>
+                </div>
+                )}
+              </CardContent>
+            </Card>
             
-            <div className="flex items-center justify-between bg-muted/20 p-4 rounded-xl border">
-              <span className="text-lg font-medium">Total Geral do Orçamento:</span>
-              <span className="text-2xl font-black text-primary">R$ {totalGeralEmTempoReal.toFixed(2)}</span>
+            <div className="flex flex-col sm:flex-row items-center justify-between bg-muted/10 p-6 rounded-xl border shadow-sm gap-4 mt-8">
+              <div className="text-center sm:text-left">
+                  <span className="block text-sm font-medium text-muted-foreground">Total Geral do Orçamento:</span>
+                  <span className="text-3xl font-black text-primary">R$ {totalGeralEmTempoReal.toFixed(2)}</span>
+              </div>
+              <Button type="submit" size="lg" disabled={isSaving || (selectedExamIds.length === 0 && selectedMaterialIds.length === 0)} className="w-full sm:w-auto h-12 px-8 font-bold text-base shadow-md">
+                <Calculator className="mr-2 h-5 w-5" /> Gerar Orçamento
+              </Button>
             </div>
 
             {form.formState.errors.examIds && (

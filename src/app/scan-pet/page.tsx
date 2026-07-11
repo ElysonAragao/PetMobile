@@ -178,26 +178,25 @@ export default function ScanPetPage() {
             <CardDescription>Posicione o QR Code no centro da tela.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="aspect-video w-full bg-slate-900 rounded-xl flex flex-col items-center justify-center overflow-hidden relative border-4 border-slate-200">
-              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-              {isProcessing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white">
-                  <Loader2 className="h-12 w-12 animate-spin mb-4" />
-                  <p className="font-bold tracking-widest uppercase">Processando...</p>
-                </div>
-              )}
-            </div>
-
-            {videoDevices.length > 1 && (
-              <div className="space-y-2">
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
                 <Select value={selectedDeviceId} onValueChange={(val) => {
                   setSelectedDeviceId(val);
                   localStorage.setItem('petmobile_preferred_camera', val);
                   setTimeout(() => startCameraStream(val), 300);
                 }}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Escolha a câmera..." /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-primary border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
+                    <div className="flex items-center gap-2 truncate">
+                      <Camera className="h-4 w-4 shrink-0" />
+                      <SelectValue placeholder="Buscando câmeras..." />
+                    </div>
+                  </SelectTrigger>
                   <SelectContent>
+                    {videoDevices.length === 0 && (
+                      <SelectItem value="none" disabled>
+                        Nenhuma câmera encontrada
+                      </SelectItem>
+                    )}
                     {videoDevices.map((device, i) => (
                       <SelectItem key={device.deviceId} value={device.deviceId}>
                         {device.label || `Câmera ${i + 1}`}
@@ -206,11 +205,38 @@ export default function ScanPetPage() {
                   </SelectContent>
                 </Select>
               </div>
-            )}
+              <Button 
+                onClick={() => {
+                  refreshDevices();
+                  if (selectedDeviceId) startCameraStream(selectedDeviceId);
+                }} 
+                variant="outline" 
+                size="icon" 
+                className="shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors"
+                title="Atualizar câmeras"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
 
-            <Button onClick={() => startCameraStream(selectedDeviceId)} variant="outline" className="w-full">
-              <RefreshCw className="mr-2 h-4 w-4" /> Reiniciar Câmera
-            </Button>
+            <div className="aspect-video w-full bg-slate-900 rounded-xl flex flex-col items-center justify-center overflow-hidden relative border-4 border-slate-200">
+              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              
+              {/* Scan Overlay Guidelines */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="w-full h-full border-[24px] border-black/40">
+                  <div className="w-full h-full border-2 border-dashed border-emerald-400/70" />
+                </div>
+              </div>
+
+              {isProcessing && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white z-10 backdrop-blur-sm">
+                  <Loader2 className="h-12 w-12 animate-spin mb-4 text-emerald-400" />
+                  <p className="font-bold tracking-widest uppercase text-emerald-400">Processando...</p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -3,6 +3,7 @@ import { PT_Sans } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { SessionProvider } from '@/context/session-context';
+import { ActiveMedicoProvider } from '@/context/active-medico-context';
 import { ConditionalLayout } from '@/components/layout/conditional-layout';
 import { Toaster } from "@/components/ui/toaster";
 
@@ -64,7 +65,9 @@ export default function RootLayout({
         )}
       >
         <SessionProvider>
-          <ConditionalLayout>{children}</ConditionalLayout>
+          <ActiveMedicoProvider>
+            <ConditionalLayout>{children}</ConditionalLayout>
+          </ActiveMedicoProvider>
         </SessionProvider>
         <Toaster />
         

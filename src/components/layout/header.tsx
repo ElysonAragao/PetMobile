@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { CompanySelector } from './company-selector';
+import { ActiveMedicoSelector } from './active-medico-selector';
 
 declare global {
   interface Window {
@@ -106,6 +107,10 @@ export function Header() {
 
           <div className="hidden md:block">
             <CompanySelector />
+          </div>
+
+          <div className="hidden sm:block">
+            <ActiveMedicoSelector />
           </div>
 
           {user ? (

@@ -33,8 +33,11 @@ export function useAgenda() {
           tutor_telefone,
           status,
           tipo,
+          local,
           created_at,
-          medico:pet_usuarios(nome, crmv_uf),
+          created_by,
+          medico:pet_usuarios!pet_agenda_medico_id_fkey(nome, crmv_uf),
+          criador:pet_usuarios!fk_agenda_created_by(nome),
           pet:pet_pets(nome, cod_pet)
         `)
         .eq('empresa_id', selectedEmpresaId);
@@ -74,9 +77,12 @@ export function useAgenda() {
         tutorTelefone: row.tutor_telefone,
         status: row.status,
         tipo: row.tipo || 'Consulta',
+        local: row.local || null,
         createdAt: row.created_at,
+        createdBy: row.created_by,
         medico: row.medico ? { nome: row.medico.nome, crmv_uf: row.medico.crmv_uf } : undefined,
-        pet: row.pet ? { nome: row.pet.nome, codPet: row.pet.cod_pet } : undefined
+        pet: row.pet ? { nome: row.pet.nome, codPet: row.pet.cod_pet } : undefined,
+        criador: row.criador ? { nome: row.criador.nome } : undefined
       }));
 
       setAgenda(mappedData);
@@ -97,11 +103,58 @@ export function useAgenda() {
     petNome: string;
     tutorTelefone: string;
     tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
-  }): Promise<{ success: boolean; message?: string }> => {
+    local?: string;
+    status?: 'Agendado' | 'Bloqueado';
+  }): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       if (!selectedEmpresaId) {
         return { success: false, message: 'Clínica não selecionada ou sessão expirada.' };
       }
+
+      // VALIDAÇÃO DE BLOQUEIOS
+      if (agendaData.status !== 'Bloqueado') {
+        const appDate = new Date(agendaData.dataAgendamento);
+        // Considerando fuso horário local para a string de data
+        const appDateStr = appDate.toISOString().split('T')[0];
+        const appTimeStr = appDate.toTimeString().substring(0, 5); // formato HH:mm
+
+        const { data: bloqueios, error: blockError } = await supabase
+          .from('pet_agenda_bloqueios')
+          .select('*')
+          .eq('empresa_id', selectedEmpresaId)
+          .lte('data_inicio', appDateStr)
+          .gte('data_fim', appDateStr);
+
+        if (!blockError && bloqueios && bloqueios.length > 0) {
+          const isBlocked = bloqueios.some(b => {
+            if (b.medico_id && b.medico_id !== agendaData.medicoId) return false;
+            
+            if (b.tipo_bloqueio === 'dia' || b.tipo_bloqueio === 'semana' || b.tipo_bloqueio === 'mes') return true;
+            if (b.tipo_bloqueio === 'hora' && b.hora_inicio && b.hora_fim) {
+              return appTimeStr >= b.hora_inicio && appTimeStr <= b.hora_fim;
+            }
+            if (b.tipo_bloqueio === 'manha') {
+              return appTimeStr >= '06:00' && appTimeStr <= '12:00';
+            }
+            if (b.tipo_bloqueio === 'tarde') {
+              return appTimeStr > '12:00' && appTimeStr <= '18:00';
+            }
+            return false;
+          });
+
+          if (isBlocked) {
+            return { 
+              success: false, 
+              message: 'Horário indisponível: Existe um bloqueio ativo para este médico neste horário.',
+              isBlocked: true
+            };
+          }
+        }
+      }
+
+      // Buscar usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      const usuarioId = user?.id;
 
       const payload = {
         empresa_id: selectedEmpresaId,
@@ -112,8 +165,10 @@ export function useAgenda() {
         tutor_nome: agendaData.tutorNome.trim(),
         pet_nome: agendaData.petNome.trim(),
         tutor_telefone: agendaData.tutorTelefone?.trim() || null,
-        status: 'Agendado',
-        tipo: agendaData.tipo || 'Consulta'
+        status: agendaData.status || 'Agendado',
+        tipo: agendaData.tipo || 'Consulta',
+        local: agendaData.local || null,
+        created_by: usuarioId || null
       };
 
       const { error: insertError } = await supabase
@@ -129,6 +184,78 @@ export function useAgenda() {
     }
   }, [supabase, selectedEmpresaId]);
 
+  const fetchBloqueios = useCallback(async (medicoId?: string) => {
+    if (!selectedEmpresaId) return [];
+    try {
+      let query = supabase
+        .from('pet_agenda_bloqueios')
+        .select(`*, medico:pet_usuarios(nome)`)
+        .eq('empresa_id', selectedEmpresaId)
+        .gte('data_fim', new Date().toISOString().split('T')[0]) // Só pegar bloqueios ativos hoje em diante
+        .order('data_inicio', { ascending: true });
+
+      if (medicoId && medicoId !== 'all') {
+        query = query.eq('medico_id', medicoId);
+      }
+
+      const { data, error } = await query;
+      console.log("[fetchBloqueios] Data from Supabase:", data, "Error:", error);
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error("Error fetching blocks: ", e);
+      return [];
+    }
+  }, [supabase, selectedEmpresaId]);
+
+  const addAgendaBloqueio = useCallback(async (bloqueioData: {
+    medicoId: string | null;
+    tipoBloqueio: 'hora' | 'dia' | 'manha' | 'tarde' | 'semana' | 'mes';
+    dataInicio: string;
+    dataFim: string;
+    horaInicio: string | null;
+    horaFim: string | null;
+    local: string | null;
+  }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!selectedEmpresaId) return { success: false, message: 'Clínica não selecionada' };
+      
+      const payload = {
+        empresa_id: selectedEmpresaId,
+        medico_id: bloqueioData.medicoId,
+        tipo_bloqueio: bloqueioData.tipoBloqueio,
+        data_inicio: bloqueioData.dataInicio,
+        data_fim: bloqueioData.dataFim,
+        hora_inicio: bloqueioData.horaInicio,
+        hora_fim: bloqueioData.horaFim,
+        local: bloqueioData.local
+      };
+
+      const { error } = await supabase.from('pet_agenda_bloqueios').insert(payload);
+      if (error) throw error;
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error adding block: ", e);
+      return { success: false, message: e.message || 'Falha ao registrar bloqueio.' };
+    }
+  }, [supabase, selectedEmpresaId]);
+
+  const deleteAgendaBloqueio = useCallback(async (id: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const { error: deleteError } = await supabase
+        .from('pet_agenda_bloqueios')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error deleting block: ", e);
+      return { success: false, message: e.message || 'Falha ao excluir bloqueio.' };
+    }
+  }, [supabase]);
+
   const updateAgenda = useCallback(async (id: string, agendaData: {
     medicoId: string | null;
     dataAgendamento: string;
@@ -137,8 +264,9 @@ export function useAgenda() {
     tutorNome: string;
     petNome: string;
     tutorTelefone: string;
-    status?: 'Agendado' | 'Cancelado' | 'Realizado';
+    status?: 'Agendado' | 'Cancelado' | 'Realizado' | 'Bloqueado';
     tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
+    local?: string;
   }): Promise<{ success: boolean; message?: string }> => {
     try {
       const payload: any = {
@@ -157,6 +285,10 @@ export function useAgenda() {
 
       if (agendaData.tipo) {
         payload.tipo = agendaData.tipo;
+      }
+
+      if (agendaData.local !== undefined) {
+        payload.local = agendaData.local;
       }
 
       const { error: updateError } = await supabase
@@ -260,6 +392,9 @@ export function useAgenda() {
     error,
     fetchAgenda,
     addAgenda,
+    addAgendaBloqueio,
+    fetchBloqueios,
+    deleteAgendaBloqueio,
     updateAgenda,
     updateAgendaStatus,
     deleteAgenda,

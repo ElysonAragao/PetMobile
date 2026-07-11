@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
     Building2, Users, PlusCircle, Trash2, Edit, KeyRound, Undo2,
-    Loader2, ArrowUpDown, Shield, RotateCcw
+    Loader2, ArrowUpDown, Shield, RotateCcw, UploadCloud, Stethoscope, Download,
+    Database, HardDrive, Activity
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
+import * as xlsx from "xlsx";
 
 import { PageTitle } from "@/components/layout/page-title";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -736,6 +738,715 @@ function UsuariosTab() {
     );
 }
 
+// ─────────── Importações Tab ───────────
+function ImportacoesTab() {
+    const [empresas, setEmpresas] = React.useState<Empresa[]>([]);
+    const [selectedEmpresa, setSelectedEmpresa] = React.useState<string>("");
+    const [file, setFile] = React.useState<File | null>(null);
+    const [importing, setImporting] = React.useState(false);
+    const { toast } = useToast();
+
+    React.useEffect(() => {
+        adminApi("GET", undefined, "resource=empresas").then(res => {
+            if (res.data) setEmpresas(res.data);
+        });
+    }, []);
+
+    const handleImport = async () => {
+        if (!selectedEmpresa) {
+            toast({ title: "Erro", description: "Selecione a empresa de destino.", variant: "destructive" });
+            return;
+        }
+        if (!file) {
+            toast({ title: "Erro", description: "Selecione o arquivo Excel.", variant: "destructive" });
+            return;
+        }
+
+        setImporting(true);
+        try {
+            const buffer = await file.arrayBuffer();
+            const workbook = xlsx.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const data = xlsx.utils.sheet_to_json(sheet);
+            
+            const res = await adminApi("POST", { action: "import_exams", empresaId: selectedEmpresa, data });
+            
+            if (res.success) {
+                toast({ title: "Sucesso", description: `Foram importados ${res.count} registros com sucesso para a empresa.` });
+                setFile(null);
+                const fileInput = document.getElementById('excel-file') as HTMLInputElement;
+                if (fileInput) fileInput.value = '';
+            } else {
+                toast({ title: "Erro na importação", description: res.error || "Ocorreu um erro no servidor.", variant: "destructive" });
+            }
+
+        } catch (error) {
+            toast({ title: "Erro na leitura", description: "Verifique o formato do arquivo e tente novamente.", variant: "destructive" });
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    return (
+        <Card className="border-indigo-100 shadow-sm">
+            <CardHeader className="bg-indigo-50/50 rounded-t-xl border-b border-indigo-100">
+                <CardTitle className="text-indigo-800 flex items-center text-lg">
+                    <UploadCloud className="w-5 h-5 mr-2" />
+                    Importação de Catálogo TUSS/ANS
+                </CardTitle>
+                <CardDescription>
+                    Faça o upload da tabela oficial de exames (Excel) para carregar os códigos e nomes diretamente para uma clínica.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <Label>Empresa / Clínica de Destino *</Label>
+                        <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione a empresa" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {empresas.map(emp => (
+                                    <SelectItem key={emp.id} value={emp.id}>{emp.nome_fantasia}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            O catálogo de exames será importado e vinculado apenas a esta empresa.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Arquivo Excel (.xlsx) *</Label>
+                        <Input 
+                            id="excel-file"
+                            type="file" 
+                            accept=".xlsx, .xls"
+                            onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            O arquivo deve conter as colunas "Código" (ou Termo) e "Nome" (ou Descrição).
+                        </p>
+                    </div>
+                </div>
+                
+                <div className="flex justify-end pt-4 border-t">
+                    <Button 
+                        className="bg-indigo-400 hover:bg-indigo-500 text-white" 
+                        onClick={handleImport} 
+                        disabled={importing}
+                    >
+                        {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importando...</> : <><UploadCloud className="w-4 h-4 mr-2" /> Iniciar Importação</>}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+// ─────────── Manutenção Tab ───────────
+function ManutencaoTab() {
+    const { toast } = useToast();
+    const [loading, setLoading] = React.useState<string | null>(null);
+    const [empresas, setEmpresas] = React.useState<Empresa[]>([]);
+    const [selectedEmpresa, setSelectedEmpresa] = React.useState<string>("");
+
+    React.useEffect(() => {
+        adminApi("GET", undefined, "resource=empresas").then(res => {
+            if (res.data) setEmpresas(res.data);
+        });
+    }, []);
+
+    const handleMaintenanceAction = async (actionId: string, actionName: string) => {
+        if (!selectedEmpresa) {
+            toast({ title: "Atenção", description: "Selecione uma empresa para aplicar a ação.", variant: "destructive" });
+            return;
+        }
+
+        setLoading(actionId);
+        try {
+            const res = await adminApi("POST", { action: actionId, empresaId: selectedEmpresa });
+            
+            if (res.success) {
+                toast({ title: "Ação Concluída", description: `A ação "${actionName}" foi realizada com sucesso na empresa selecionada.` });
+            } else {
+                toast({ title: "Erro", description: res.error || "Não foi possível concluir a ação.", variant: "destructive" });
+            }
+        } catch (error) {
+            toast({ title: "Erro", description: "Ocorreu um erro ao conectar com o servidor.", variant: "destructive" });
+        } finally {
+            setLoading(null);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center space-x-2 text-orange-800 mb-2">
+                    <Shield className="w-5 h-5" />
+                    <h3 className="font-semibold text-lg">Área de Risco - Selecione a Empresa Alvo</h3>
+                </div>
+                <p className="text-orange-700 text-sm mb-4">
+                    As ações abaixo são destrutivas. Selecione cuidadosamente a empresa na qual deseja executar a limpeza de dados.
+                </p>
+                <div className="max-w-md">
+                    <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
+                        <SelectTrigger className="bg-white border-orange-300">
+                            <SelectValue placeholder="Selecione a Empresa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {empresas.map(emp => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.nome_fantasia}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Zerar Movimentações */}
+                <Card className="border-red-100 hover:border-red-200 transition-colors">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-red-700 flex items-center text-lg">
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Zerar Movimentações / Faturamento
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Esta ação excluirá permanentemente TODAS as guias de movimentação geradas no sistema para a empresa selecionada.
+                        </p>
+                        <p className="text-xs text-red-600/80 font-medium">
+                            Aviso: A estrutura da tabela e as configurações do sistema permanecerão intactas. Apenas os registros de dados serão limpos. Esta ação não pode ser desfeita.
+                        </p>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={!selectedEmpresa || loading === 'reset_movements'}>
+                                    {loading === 'reset_movements' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                                    Zerar Movimentações
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Isto apagará permanentemente todos os registros de <b>movimentação e faturamento</b> da empresa selecionada.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleMaintenanceAction('reset_movements', 'Zerar Movimentações')}>Confirmar Exclusão</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+
+                {/* Zerar Leituras */}
+                <Card className="border-red-100 hover:border-red-200 transition-colors">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-red-700 flex items-center text-lg">
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Zerar Leituras
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Esta ação excluirá permanentemente TODAS as leituras de exames registradas para a empresa selecionada.
+                        </p>
+                        <p className="text-xs text-red-600/80 font-medium">
+                            Aviso: A estrutura da tabela e as configurações do sistema permanecerão intactas. Apenas os registros de dados serão limpos. Esta ação não pode ser desfeita.
+                        </p>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={!selectedEmpresa || loading === 'reset_leituras'}>
+                                    {loading === 'reset_leituras' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                                    Zerar Leituras
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Isto apagará permanentemente todos os registros de <b>leituras de exames</b> da empresa selecionada.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleMaintenanceAction('reset_leituras', 'Zerar Leituras')}>Confirmar Exclusão</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+
+                {/* Zerar Exames / Procedimentos */}
+                <Card className="border-red-100 hover:border-red-200 transition-colors">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-red-700 flex items-center text-lg">
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Zerar Exames / Procedimentos
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Esta ação excluirá permanentemente TODOS os exames e procedimentos cadastrados no catálogo da empresa.
+                        </p>
+                        <p className="text-xs text-red-600/80 font-medium">
+                            Aviso: A estrutura da tabela e as configurações do sistema permanecerão intactas. Apenas os registros de dados serão limpos. Esta ação não pode ser desfeita.
+                        </p>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={!selectedEmpresa || loading === 'reset_exames'}>
+                                    {loading === 'reset_exames' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                                    Zerar Exames
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Isto apagará permanentemente todo o <b>catálogo de exames e procedimentos</b> da empresa selecionada.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleMaintenanceAction('reset_exames', 'Zerar Exames')}>Confirmar Exclusão</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+
+                {/* Zerar Orçamentos */}
+                <Card className="border-red-100 hover:border-red-200 transition-colors">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-red-700 flex items-center text-lg">
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Zerar Orçamentos
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Esta ação excluirá permanentemente TODOS os orçamentos e itens vinculados emitidos pela empresa selecionada.
+                        </p>
+                        <p className="text-xs text-red-600/80 font-medium">
+                            Aviso: A estrutura da tabela e as configurações do sistema permanecerão intactas. Apenas os registros de dados serão limpos. Esta ação não pode ser desfeita.
+                        </p>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={!selectedEmpresa || loading === 'reset_orcamentos'}>
+                                    {loading === 'reset_orcamentos' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                                    Zerar Orçamentos
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Isto apagará permanentemente todos os <b>orçamentos emitidos</b> da empresa selecionada.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleMaintenanceAction('reset_orcamentos', 'Zerar Orçamentos')}>Confirmar Exclusão</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
+}
+
+// ─────────── Especialidades Tab ───────────
+function EspecialidadesTab() {
+    const { toast } = useToast();
+    const [especialidades, setEspecialidades] = React.useState<{id: string, nome: string}[]>([]);
+    const [novaEspecialidade, setNovaEspecialidade] = React.useState("");
+    const [loading, setLoading] = React.useState(true);
+    const [adding, setAdding] = React.useState(false);
+    const [importing, setImporting] = React.useState(false);
+
+    const fetchEspecialidades = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            const supabase = createClient();
+            const { data, error } = await supabase.from('pet_especialidades').select('*').order('nome');
+            if (error) {
+                if (error.code === '42P01') {
+                    setEspecialidades([
+                        { id: '1', nome: 'Cardiologia' },
+                        { id: '2', nome: 'Clínica Médica' }
+                    ]);
+                }
+            } else {
+                setEspecialidades(data || []);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        fetchEspecialidades();
+    }, [fetchEspecialidades]);
+
+    const handleAdd = async () => {
+        if (!novaEspecialidade.trim()) return;
+        setAdding(true);
+        
+        try {
+            const supabase = createClient();
+            const { error } = await supabase.from('pet_especialidades').insert([{ nome: novaEspecialidade }]);
+            
+            if (error) {
+                if (error.code === '42P01') {
+                     setEspecialidades(prev => [...prev, { id: Date.now().toString(), nome: novaEspecialidade }]);
+                } else {
+                     throw error;
+                }
+            } else {
+                fetchEspecialidades();
+            }
+            
+            toast({ title: "Sucesso", description: "Especialidade adicionada com sucesso." });
+            setNovaEspecialidade("");
+        } catch (e: any) {
+            toast({ title: "Erro", description: "Não foi possível adicionar. Verifique se a tabela existe.", variant: "destructive" });
+        } finally {
+            setAdding(false);
+        }
+    };
+
+    const handleDelete = async (id: string, nome: string) => {
+        try {
+            const supabase = createClient();
+            const { error } = await supabase.from('pet_especialidades').delete().eq('id', id);
+            
+            if (error) {
+                 if (error.code === '42P01') {
+                     setEspecialidades(prev => prev.filter(e => e.id !== id));
+                 } else {
+                     throw error;
+                 }
+            } else {
+                 fetchEspecialidades();
+            }
+            toast({ title: "Sucesso", description: `Especialidade ${nome} removida.` });
+        } catch (e: any) {
+            toast({ title: "Erro", description: "Não foi possível remover.", variant: "destructive" });
+        }
+    };
+
+    const handleExport = (format: 'xlsx' | 'csv') => {
+        if (especialidades.length === 0) {
+            toast({ title: "Atenção", description: "Não há especialidades para exportar." });
+            return;
+        }
+
+        const dataToExport = especialidades.map(esp => ({ Especialidade: esp.nome }));
+        const worksheet = xlsx.utils.json_to_sheet(dataToExport);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Especialidades");
+
+        if (format === 'csv') {
+            const csvData = xlsx.utils.sheet_to_csv(worksheet);
+            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "especialidades.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            xlsx.writeFile(workbook, "especialidades.xlsx");
+        }
+    };
+
+    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setImporting(true);
+        try {
+            const buffer = await file.arrayBuffer();
+            const workbook = xlsx.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const data: any[] = xlsx.utils.sheet_to_json(sheet);
+
+            if (data.length === 0) {
+                toast({ title: "Erro", description: "O arquivo está vazio.", variant: "destructive" });
+                return;
+            }
+
+            const supabase = createClient();
+            let count = 0;
+
+            for (const row of data) {
+                const nome = row['Especialidade'] || row['especialidade'] || row['Nome'] || row['nome'];
+                if (nome && typeof nome === 'string' && nome.trim() !== '') {
+                    // Try to insert, ignoring duplicates
+                    const { error } = await supabase.from('pet_especialidades').insert([{ nome: nome.trim() }]);
+                    if (!error) count++;
+                }
+            }
+
+            if (count > 0) {
+                toast({ title: "Importação Concluída", description: `${count} especialidades foram importadas com sucesso.` });
+                fetchEspecialidades();
+            } else {
+                toast({ title: "Aviso", description: "Nenhuma especialidade nova foi importada (podem ser duplicadas)." });
+            }
+        } catch (error) {
+            toast({ title: "Erro na importação", description: "Falha ao processar o arquivo. Verifique o formato.", variant: "destructive" });
+        } finally {
+            setImporting(false);
+            if (e.target) e.target.value = ''; // Reset file input
+        }
+    };
+
+    return (
+        <Card className="max-w-4xl">
+            <CardHeader>
+                <CardTitle className="text-xl">Especialidades Médicas</CardTitle>
+                <CardDescription>Gerencie as especialidades que aparecerão no cadastro de médicos.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex flex-col sm:flex-row gap-4 mb-8 justify-between items-start sm:items-center">
+                    <div className="flex gap-2 w-full sm:w-auto flex-1">
+                        <Input 
+                            placeholder="Nova Especialidade (ex: Neurologia)" 
+                            value={novaEspecialidade}
+                            onChange={(e) => setNovaEspecialidade(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                            className="max-w-xs"
+                        />
+                        <Button onClick={handleAdd} disabled={adding || !novaEspecialidade.trim()} className="bg-indigo-500 hover:bg-indigo-600 text-white">
+                            {adding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlusCircle className="w-4 h-4 mr-2" />}
+                            Adicionar
+                        </Button>
+                    </div>
+
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <input 
+                            type="file" 
+                            id="import-especialidades" 
+                            className="hidden" 
+                            accept=".csv, .xlsx, .xls" 
+                            onChange={handleImportFile}
+                            disabled={importing}
+                        />
+                        <Button 
+                            variant="outline" 
+                            onClick={() => document.getElementById('import-especialidades')?.click()}
+                            disabled={importing}
+                        >
+                            {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-2" />}
+                            Importar
+                        </Button>
+                        
+                        <Select onValueChange={(val: 'csv' | 'xlsx') => handleExport(val)}>
+                            <SelectTrigger className="w-[140px]">
+                                <Download className="w-4 h-4 mr-2" />
+                                <SelectValue placeholder="Exportar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                                <SelectItem value="csv">CSV (.csv)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nome da Especialidade</TableHead>
+                                <TableHead className="w-24 text-center">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center h-24">
+                                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+                                    </TableCell>
+                                </TableRow>
+                            ) : especialidades.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center h-24 text-muted-foreground">
+                                        Nenhuma especialidade cadastrada.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                especialidades.map((esp) => (
+                                    <TableRow key={esp.id}>
+                                        <TableCell className="font-medium">{esp.nome}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                onClick={() => handleDelete(esp.id, esp.nome)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+// ─────────── Auditoria Tab ───────────
+function AuditoriaTab() {
+    const { toast } = useToast();
+    const [loading, setLoading] = React.useState(true);
+    const [metrics, setMetrics] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        const fetchMetrics = async () => {
+            setLoading(true);
+            try {
+                const res = await adminApi("POST", { action: "get_audit_metrics" });
+                if (res.success) {
+                    setMetrics(res.metrics);
+                } else {
+                    toast({ title: "Aviso de Auditoria", description: res.error, variant: "destructive" });
+                }
+            } catch (error) {
+                toast({ title: "Erro", description: "Falha ao buscar métricas.", variant: "destructive" });
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMetrics();
+    }, [toast]);
+
+    const formatBytes = (bytes: number) => {
+        if (!bytes) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    };
+
+    if (loading) {
+        return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+    }
+
+    if (!metrics) {
+        return (
+            <div className="p-8 text-center border border-dashed rounded-xl bg-slate-50">
+                <Database className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                <h3 className="font-semibold text-slate-700">Métricas Indisponíveis</h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto mt-2">
+                    A função SQL "get_audit_metrics" não foi encontrada no seu banco de dados. 
+                    Por favor, execute o script SQL fornecido pelo suporte para habilitar este painel.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="border-blue-100 shadow-sm">
+                    <CardHeader className="bg-blue-50/50 pb-3 rounded-t-xl border-b border-blue-100">
+                        <CardTitle className="flex items-center text-blue-800 text-lg">
+                            <Database className="w-5 h-5 mr-2" /> Banco de Dados (Postgres)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-sm text-muted-foreground">Tamanho Total Ocupado</p>
+                                <h2 className="text-3xl font-bold text-slate-800">{formatBytes(metrics.total_db_bytes || 0)}</h2>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-muted-foreground">Limite Gratuito: ~500 MB</p>
+                                <div className="w-24 h-2 bg-slate-100 rounded-full mt-2 overflow-hidden ml-auto">
+                                    <div className="h-full bg-blue-500" style={{ width: `${Math.min(((metrics.total_db_bytes || 0) / (500 * 1024 * 1024)) * 100, 100)}%` }} />
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                
+                <Card className="border-purple-100 shadow-sm">
+                    <CardHeader className="bg-purple-50/50 pb-3 rounded-t-xl border-b border-purple-100">
+                        <CardTitle className="flex items-center text-purple-800 text-lg">
+                            <HardDrive className="w-5 h-5 mr-2" /> Armazenamento (Storage)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-sm text-muted-foreground">Arquivos e Imagens</p>
+                                <h2 className="text-3xl font-bold text-slate-800">{formatBytes(metrics.total_storage_bytes || 0)}</h2>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-muted-foreground">Limite Gratuito: 1 GB</p>
+                                <div className="w-24 h-2 bg-slate-100 rounded-full mt-2 overflow-hidden ml-auto">
+                                    <div className="h-full bg-purple-500" style={{ width: `${Math.min(((metrics.total_storage_bytes || 0) / (1024 * 1024 * 1024)) * 100, 100)}%` }} />
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Consumo por Empresa (Clínica)</CardTitle>
+                    <CardDescription>Detalhamento de registros e imagens armazenadas por cada cliente.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Empresa</TableHead>
+                                    <TableHead className="text-right">Pets</TableHead>
+                                    <TableHead className="text-right">Prontuários</TableHead>
+                                    <TableHead className="text-right">Movimentações</TableHead>
+                                    <TableHead className="text-right">Usuários</TableHead>
+                                    <TableHead className="text-right font-bold text-purple-700">Storage (Imagens)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {metrics.empresas?.sort((a:any, b:any) => b.storage_bytes - a.storage_bytes).map((emp: any) => (
+                                    <TableRow key={emp.empresa_id}>
+                                        <TableCell className="font-medium">{emp.nome}</TableCell>
+                                        <TableCell className="text-right">{emp.pets}</TableCell>
+                                        <TableCell className="text-right">{emp.prontuarios}</TableCell>
+                                        <TableCell className="text-right">{emp.movimentacoes}</TableCell>
+                                        <TableCell className="text-right">{emp.usuarios}</TableCell>
+                                        <TableCell className="text-right font-mono font-bold text-purple-700">{formatBytes(emp.storage_bytes)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
 // ─────────── Main Page ───────────
 export default function AdminPage() {
     const { user, isMaster } = useSession();
@@ -772,12 +1483,24 @@ export default function AdminPage() {
             </PageTitle>
 
             <Tabs defaultValue="empresas" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+                <TabsList className="flex flex-wrap justify-start w-full md:w-auto md:inline-flex md:h-10 bg-muted p-1 rounded-lg gap-1 overflow-x-auto">
                     <TabsTrigger value="empresas">
                         <Building2 className="mr-2 h-4 w-4" />Empresas
                     </TabsTrigger>
                     <TabsTrigger value="usuarios">
                         <Users className="mr-2 h-4 w-4" />Usuários
+                    </TabsTrigger>
+                    <TabsTrigger value="importacoes">
+                        <UploadCloud className="mr-2 h-4 w-4" />Importações
+                    </TabsTrigger>
+                    <TabsTrigger value="manutencao">
+                        <Shield className="mr-2 h-4 w-4" />Manutenção
+                    </TabsTrigger>
+                    <TabsTrigger value="especialidades">
+                        <Stethoscope className="mr-2 h-4 w-4" />Especialidades
+                    </TabsTrigger>
+                    <TabsTrigger value="auditoria">
+                        <Activity className="mr-2 h-4 w-4" />Auditoria
                     </TabsTrigger>
                 </TabsList>
 
@@ -787,6 +1510,22 @@ export default function AdminPage() {
 
                 <TabsContent value="usuarios" className="mt-6">
                     <UsuariosTab />
+                </TabsContent>
+
+                <TabsContent value="importacoes" className="mt-6">
+                    <ImportacoesTab />
+                </TabsContent>
+
+                <TabsContent value="manutencao" className="mt-6">
+                    <ManutencaoTab />
+                </TabsContent>
+
+                <TabsContent value="especialidades" className="mt-6">
+                    <EspecialidadesTab />
+                </TabsContent>
+                
+                <TabsContent value="auditoria" className="mt-6">
+                    <AuditoriaTab />
                 </TabsContent>
             </Tabs>
         </>

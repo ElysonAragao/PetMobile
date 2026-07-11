@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from 'react';
-import { Plus, Search, FileText, Trash2, Edit2, Star, Save, Filter, Printer } from 'lucide-react';
+import { Plus, Search, FileText, Trash2, Edit2, Star, Save, Filter, Printer, Undo2 } from 'lucide-react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ const modeloSchema = z.object({
 type ModeloFormValues = z.infer<typeof modeloSchema>;
 
 export function ModelosManager() {
+  const searchParams = useSearchParams();
   const { modelos, isLoaded, addModelo, updateModelo, deleteModelo } = useModelos();
   const { user, selectedEmpresaId } = useSession();
   const { toast } = useToast();
@@ -46,10 +48,16 @@ export function ModelosManager() {
   
   const [searchTerm, setSearchTerm] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string>("all");
-  const [medicoFilter, setMedicoFilter] = React.useState<string>("all");
+  const [medicoFilter, setMedicoFilter] = React.useState<string>(searchParams.get('medicoId') || "all");
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const medicoId = searchParams.get('medicoId');
+    if (medicoId) setMedicoFilter(medicoId);
+  }, [searchParams]);
   const [editingModelo, setEditingModelo] = React.useState<Modelo | null>(null);
   const router = useRouter();
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // States for Exam selection mode
   const [examSearch, setExamSearch] = React.useState("");
@@ -65,6 +73,23 @@ export function ModelosManager() {
       medico_id: "global",
     },
   });
+
+  const handleInsertKey = React.useCallback((key: string) => {
+    const currentContent = form.getValues('conteudo') || '';
+    const el = textareaRef.current;
+    if (el) {
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const newContent = currentContent.substring(0, start) + key + currentContent.substring(end);
+      form.setValue('conteudo', newContent, { shouldDirty: true, shouldValidate: true });
+      setTimeout(() => {
+        el.focus();
+        el.setSelectionRange(start + key.length, start + key.length);
+      }, 0);
+    } else {
+      form.setValue('conteudo', currentContent + (currentContent && !currentContent.endsWith(' ') ? ' ' : '') + key, { shouldDirty: true, shouldValidate: true });
+    }
+  }, [form]);
 
   const selectedTipo = form.watch("tipo");
 
@@ -199,53 +224,32 @@ export function ModelosManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">Gerenciar Modelos</h3>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Gerenciar Modelos</h3>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => {
-            const filters = [];
-            if (typeFilter !== 'all') filters.push({ label: 'Tipo', value: typeFilter });
-            if (isGeralRole && medicoFilter !== 'all') {
-              const medName = medicoFilter === 'global' ? 'Global (Todos)' : veterinarios.find(v => v.id === medicoFilter)?.nome || 'Desconhecido';
-              filters.push({ label: 'Médico', value: medName });
-            }
-
-            const reportData = {
-              title: "Modelos e Templates do Corpo Clínico",
-              subtitle: "Lista de documentos, atestados e receitas salvas",
-              filters: filters.length > 0 ? filters : undefined,
-              headers: ["Nome do Médico", "Tipo de Modelo", "Nome do Modelo"],
-              rows: filteredModelos.map(m => {
-                const medicoNome = m.medico_id === 'global' || !m.medico_id ? 'Global (Todos)' : veterinarios.find(v => v.id === m.medico_id)?.nome || 'Desconhecido';
-                return [medicoNome, m.tipo, m.nome];
-              }),
-              backUrl: '/veterinarios?tab=modelos'
-            };
-            localStorage.setItem('print-report-data', JSON.stringify(reportData));
-            router.push('/print/report');
-          }}>
-            <Printer className="mr-2 h-4 w-4" /> Imprimir PDF
+          <Button variant="outline" onClick={() => router.push('/veterinarios?tab=list')}>
+            <Undo2 className="mr-2 h-4 w-4" /> Voltar
           </Button>
-          <Button onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" /> Novo Modelo
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-muted/30 p-4 rounded-lg border">
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm">
         <div className="relative w-full md:w-1/2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
             placeholder="Buscar por nome ou conteúdo..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
+            className="pl-10 border-slate-200"
           />
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
           {isGeralRole && (
             <Select value={medicoFilter} onValueChange={setMedicoFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="mr-2 h-4 w-4" />
+              <SelectTrigger className="w-[180px] border-slate-200">
+                <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
                 <SelectValue placeholder="Médico" />
               </SelectTrigger>
               <SelectContent>
@@ -259,79 +263,103 @@ export function ModelosManager() {
           )}
 
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="mr-2 h-4 w-4" />
+            <SelectTrigger className="w-[180px] border-slate-200">
+              <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
-              <SelectItem value="Exame_Lab">Exame_Lab</SelectItem>
-              <SelectItem value="Exame_Img">Exame_Img</SelectItem>
+              <SelectItem value="Exame_Lab">Exames</SelectItem>
+              <SelectItem value="Exame_Img">Imagens</SelectItem>
               <SelectItem value="Atestado">Atestado</SelectItem>
               <SelectItem value="Laudo">Laudo</SelectItem>
-              <SelectItem value="Encaminhamento/Internação">Encaminhamento/Internação</SelectItem>
+              <SelectItem value="Encaminhamento/Internação">Encaminhamento</SelectItem>
               <SelectItem value="Outros">Outros</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredModelos.map((modelo) => (
-          <Card key={modelo.id} className={`group relative transition-all hover:shadow-md ${modelo.is_favorite ? 'border-primary/40 bg-primary/5' : ''}`}>
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div className="flex flex-col items-start gap-1.5">
-                  <Badge variant={
-                    ['Exame_Lab', 'Exame_Img'].includes(modelo.tipo) ? 'default' :
-                    modelo.tipo === 'Atestado' ? 'secondary' :
-                    modelo.tipo === 'Encaminhamento/Internação' ? 'destructive' : 'secondary'
-                  }>
-                    {modelo.tipo}
-                  </Badge>
-                  {isGeralRole && (
-                    <span className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-sm">
-                      {modelo.medico_id === 'global' || !modelo.medico_id 
-                        ? 'GLOBAL (Todos)' 
-                        : veterinarios.find(v => v.id === modelo.medico_id)?.nome || 'MÉDICO DESCONHECIDO'}
-                    </span>
-                  )}
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className={`h-8 w-8 ${modelo.is_favorite ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-400 opacity-0 group-hover:opacity-100'}`}
-                  onClick={() => handleToggleFavorite(modelo)}
-                >
-                  <Star className={`h-5 w-5 ${modelo.is_favorite ? 'fill-current' : ''}`} />
-                </Button>
-              </div>
-              <CardTitle className="text-lg mt-2 group-hover:text-primary transition-colors">{modelo.nome}</CardTitle>
-              <CardDescription className="line-clamp-2 h-10 text-xs">
-                {modelo.conteudo}
-              </CardDescription>
-            </CardHeader>
-            <CardFooter className="pt-0 flex justify-end gap-2 border-t mt-4 pt-4">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(modelo)}>
-                <Edit2 className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(modelo.id)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50">
+              <TableHead className="w-[150px] font-semibold text-slate-600">Tipo</TableHead>
+              <TableHead className="font-semibold text-slate-600">Nome do Modelo</TableHead>
+              <TableHead className="font-semibold text-slate-600">Médico / Global</TableHead>
+              <TableHead className="text-right font-semibold text-slate-600">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredModelos.map((modelo) => {
+              const medicoNome = modelo.medico_id === 'global' || !modelo.medico_id 
+                ? 'Global' 
+                : veterinarios.find(v => v.id === modelo.medico_id)?.nome || 'Desconhecido';
+                
+              const displayTipo = ['Exame_Lab', 'Exame_Img'].includes(modelo.tipo) ? 'Exames' : modelo.tipo;
 
-        {filteredModelos.length === 0 && (
-          <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl bg-muted/20">
-            <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground font-medium">Nenhum modelo encontrado.</p>
-            <p className="text-muted-foreground/60 text-sm mt-1">Crie um novo modelo para agilizar seu trabalho.</p>
-            <Button variant="outline" className="mt-4" onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" /> Criar Primeiro Modelo
-            </Button>
-          </div>
-        )}
+              return (
+                <TableRow key={modelo.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                  <TableCell>
+                    <Badge variant={
+                      ['Exame_Lab', 'Exame_Img'].includes(modelo.tipo) ? 'default' :
+                      modelo.tipo === 'Atestado' ? 'secondary' :
+                      modelo.tipo === 'Encaminhamento/Internação' ? 'destructive' : 'outline'
+                    } className={['Exame_Lab', 'Exame_Img'].includes(modelo.tipo) ? 'bg-blue-500 hover:bg-blue-600' : ''}>
+                      {displayTipo}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 font-medium">
+                      <button onClick={() => handleToggleFavorite(modelo)} className="focus:outline-none mt-0.5">
+                        <Star className={`h-4 w-4 ${modelo.is_favorite ? 'fill-amber-400 text-amber-400' : 'text-slate-200 hover:text-amber-400'}`} />
+                      </button>
+                      <span className="text-slate-700 dark:text-slate-300">{modelo.nome}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {medicoNome}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" title="Imprimir" onClick={() => {
+                        const reportData = {
+                          title: `Modelo: ${modelo.nome}`,
+                          subtitle: `Tipo: ${displayTipo} | Médico: ${medicoNome}`,
+                          headers: ["Conteúdo do Modelo"],
+                          rows: [[modelo.conteudo]],
+                          backUrl: '/veterinarios?tab=modelos'
+                        };
+                        localStorage.setItem('print-report-data', JSON.stringify(reportData));
+                        router.push('/print/report');
+                      }}>
+                        <Printer className="h-4 w-4 text-blue-500" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(modelo)}>
+                        <Edit2 className="h-4 w-4 text-slate-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(modelo.id)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            
+            {filteredModelos.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="h-40 text-center">
+                  <FileText className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+                  <p className="text-slate-500 font-medium">Nenhum modelo encontrado.</p>
+                  <Button variant="link" className="mt-2 text-blue-500" onClick={() => { setEditingModelo(null); form.reset(); setSelectedExamIds([]); setIsDialogOpen(true); }}>
+                    Criar novo modelo
+                  </Button>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -493,26 +521,46 @@ export function ModelosManager() {
                   )}
                 </div>
               ) : (
-                <FormField
-                  control={form.control}
-                  name="conteudo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Conteúdo do Template</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Digite aqui o texto que será carregado..." 
-                          className="min-h-[250px] font-mono text-sm" 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Use este espaço para cadastrar o texto padrão do seu modelo.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="conteudo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Conteúdo do Template</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            ref={(e) => {
+                              field.ref(e);
+                              textareaRef.current = e;
+                            }}
+                            placeholder="Digite aqui o texto que será carregado..." 
+                            className="min-h-[250px] font-mono text-sm resize-y" 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                    <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Chaves de Busca (Variáveis de Preenchimento)</h4>
+                    <p className="text-xs text-slate-500 mb-3">Clique em uma variável abaixo para inseri-la no texto. Elas serão substituídas pelos dados reais ao usar este modelo.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['{Nome do Pet}', '{Espécie}', '{Raça}', '{Idade}', '{Nome do Tutor}', '{CPF do Tutor}', '{Nome do Veterinário}', '{Data Atual}'].map(key => (
+                        <Badge 
+                          key={key} 
+                          variant="outline" 
+                          className="cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 transition-colors"
+                          onClick={() => handleInsertKey(key)}
+                        >
+                          {key}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )}
 
               <FormField

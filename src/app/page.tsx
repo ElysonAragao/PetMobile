@@ -41,40 +41,13 @@ function HomeContent() {
   type UserRole = 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Supervisor' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
 
   const features: { title: string; description: string; href: string; icon: React.ReactNode; roles: UserRole[] }[] = [
-    {
-      title: 'Painel Master',
-      description: 'Gerencie empresas, crie contas e controle o sistema.',
-      href: '/admin',
-      icon: <Shield className="h-8 w-8 text-red-500" />,
-      roles: ['Master'],
-    },
+    // L1
     {
       title: 'Agenda de Consultas',
-      description: 'Agende e consulte compromissos, com atalho para o cadastro do Pet.',
+      description: 'Agende e consulte compromissos.',
       href: '/agenda',
       icon: <Calendar className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral'],
-    },
-    {
-      title: 'Cadastro de Pets',
-      description: 'Adicione e gerencie os dados dos animais e seus tutores.',
-      href: '/pets',
-      icon: <PawPrint className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral'],
-    },
-    {
-      title: 'Cadastro de Exames',
-      description: 'Defina os tipos de exames disponíveis.',
-      href: '/exams',
-      icon: <FileText className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
-    },
-    {
-      title: 'Corpo Clínico (Vets)',
-      description: 'Adicione e gerencie os veterinários da clínica.',
-      href: '/veterinarios',
-      icon: <Stethoscope className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'Veterinário'],
     },
     {
       title: 'Convênios Veterinários',
@@ -84,40 +57,57 @@ function HomeContent() {
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
-      title: 'Cadastro de Materiais',
-      description: 'Gerencie o catálogo de produtos, insumos e EPIs.',
-      href: '/materiais',
-      icon: <PackageOpen className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
+      title: 'Cadastro de Pets',
+      description: 'Adicione pets, tutores e realize a leitura de QR Code.',
+      href: '/pets-menu',
+      icon: <PawPrint className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral'],
     },
+    // L2
     {
-      title: 'Orçamento de Material',
-      description: 'Crie estimativas de valores para exames, procedimentos e produtos.',
-      href: '/orcamento',
-      icon: <Calculator className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'MedicoVet', 'MedicoVet Geral'],
+      title: 'Corpo Clínico (Vets)',
+      description: 'Adicione e gerencie os veterinários da clínica.',
+      href: '/veterinarios',
+      icon: <Stethoscope className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
       title: 'Movimentação Médica',
       description: 'Gere guias de exames com QR Code para pacientes.',
       href: '/movement',
       icon: <Send className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário'],
     },
     {
       title: 'Leitura Médica',
       description: 'Leia uma guia de exame usando a câmera.',
       href: '/scan',
       icon: <Scan className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor', 'Leitor Geral'],
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor'],
+    },
+    // L3
+    {
+      title: 'Cadastro de Exames',
+      description: 'Defina os tipos de exames disponíveis.',
+      href: '/exams',
+      icon: <FileText className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
-      title: 'Leituras de QR Code',
-      description: 'Identifique Pets ou Materiais através de QR Code.',
-      href: '/scan-menu',
-      icon: <Scan className="h-8 w-8 text-primary" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Leitor', 'Leitor Geral', 'Relatórios'],
+      title: 'Cadastro de Materiais',
+      description: 'Gerencie o catálogo de produtos e estoque.',
+      href: '/materiais',
+      icon: <PackageOpen className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
+    {
+      title: 'Orçamento',
+      description: 'Crie estimativas de valores para serviços.',
+      href: '/orcamento',
+      icon: <Calculator className="h-8 w-8 text-primary" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Secretária', 'Secretária Geral', 'Veterinário'],
+    },
+    // L4
     {
       title: 'Relatórios',
       description: 'Relatórios e extração de dados do sistema.',
@@ -126,6 +116,21 @@ function HomeContent() {
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Relatórios'],
     },
     {
+      title: 'Leitura de Tatuagem - Teste',
+      description: 'Teste OCR em tatuagens de animais.',
+      href: '/tattoo-scan',
+      icon: <Scan className="h-8 w-8 text-indigo-500" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário', 'Leitor'],
+    },
+    {
+      title: 'Visualizar Câmeras',
+      description: 'Visualize e teste suas câmeras.',
+      href: '/cameras',
+      icon: <Video className="h-8 w-8 text-blue-500" />,
+      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'Veterinário', 'Leitor'],
+    },
+    // L5
+    {
       title: 'Gerenciar Usuários',
       description: 'Adicione e controle os usuários do sistema.',
       href: '/users',
@@ -133,18 +138,11 @@ function HomeContent() {
       roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor'],
     },
     {
-      title: 'Visualizar Câmeras',
-      description: 'Visualize e teste suas câmeras (USB e Integrada).',
-      href: '/cameras',
-      icon: <Video className="h-8 w-8 text-blue-500" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral'],
-    },
-    {
-      title: 'Leitura de Tatuagem - Teste',
-      description: 'Módulo laboratório para testar OCR em tatuagens de animais.',
-      href: '/tattoo-scan',
-      icon: <Scan className="h-8 w-8 text-indigo-500" />,
-      roles: ['Master', 'Administrador', 'Administrador Auxiliar', 'Supervisor', 'MedicoVet', 'MedicoVet Geral', 'Leitor', 'Leitor Geral'],
+      title: 'Painel Master',
+      description: 'Gerencie empresas, crie contas e controle o sistema.',
+      href: '/admin',
+      icon: <Shield className="h-8 w-8 text-red-500" />,
+      roles: ['Master'],
     }
   ];
 

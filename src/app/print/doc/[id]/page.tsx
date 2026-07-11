@@ -77,7 +77,7 @@ function PrintDocumentContent() {
 
     const handlePrint = () => window.print();
     const handleClose = () => {
-        router.back();
+        window.close();
     };
 
     if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
@@ -164,8 +164,8 @@ function PrintDocumentContent() {
                 {docData.conteudo || <span className="italic text-gray-400">Documento em branco...</span>}
             </section>
 
-            <section className="mt-20 pt-10 border-t border-black flex flex-col items-center">
-                <div className="w-64 border-b border-black mb-2"></div>
+            <section className="mt-24 flex flex-col items-center justify-center">
+                <div className="w-72 border-b border-black mb-2"></div>
                 <div className="text-center font-bold text-sm">{docData.veterinario.nome}</div>
                 <div className="text-center text-xs text-gray-600">CRMV: {docData.veterinario.crmv}</div>
             </section>

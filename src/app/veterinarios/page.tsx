@@ -217,10 +217,18 @@ function VeterinarioList({ veterinarios, isLoaded, onEdit, onDelete }: { veterin
                   <TableCell>{vet.telefone || '-'}</TableCell>
                   <TableCell><ValidadeAcessoBadge vet={vet} /></TableCell>
                   <TableCell><ProntuarioBadge vet={vet} /></TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => onEdit(vet)}><Edit className="h-4 w-4" /></Button>
+                  <TableCell className="text-right flex items-center justify-end gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      title="Gerenciar Modelos"
+                      onClick={() => router.push(`/veterinarios?tab=modelos&medicoId=${vet.id}`)}
+                    >
+                      <FileText className="h-4 w-4 text-blue-500" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(vet)} title="Editar"><Edit className="h-4 w-4" /></Button>
                     <AlertDialog>
-                       <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                       <AlertDialogTrigger asChild><Button variant="ghost" size="icon" title="Excluir"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                        <AlertDialogContent>
                          <AlertDialogHeader>
                            <AlertDialogTitle>Excluir Veterinário?</AlertDialogTitle>
@@ -252,6 +260,12 @@ export default function VeterinariosPage() {
   const { veterinarios, addVeterinario, updateVeterinario, deleteVeterinario, isLoaded, error, getNextVeterinarioCode } = useVeterinarios();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = React.useState(searchParams.get("tab") || "list");
+  
+  React.useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedVet, setSelectedVet] = React.useState<Veterinario | null>(null);
   const { toast } = useToast();
@@ -312,39 +326,51 @@ export default function VeterinariosPage() {
         </TabsContent>
         <TabsContent value="register" className="mt-6">
           <Card>
-            <CardHeader><CardTitle>Cadastro de Veterinário</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Novo Veterinário</CardTitle>
+              <CardDescription>Preencha os campos abaixo para registrar um novo veterinário.</CardDescription>
+            </CardHeader>
             <CardContent>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
-                  <FormField control={form.control} name="nome" render={({ field }) => (
-                    <FormItem><FormLabel>Nome do Profissional</FormLabel><FormControl><Input placeholder="Dr. Nome Completo" {...field} ref={nameInputRef} /></FormControl><FormMessage /></FormItem>
-                  )} />
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <FormField control={form.control} name="codVet" render={({ field }) => (
+                      <FormItem className="col-span-1 md:col-span-1"><FormLabel>Código do Veterinário</FormLabel><FormControl><Input placeholder="Automático" disabled {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="nome" render={({ field }) => (
+                      <FormItem className="col-span-1 md:col-span-3"><FormLabel>Nome do Veterinário</FormLabel><FormControl><Input placeholder="Dr. Nome Completo" {...field} ref={nameInputRef} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="crmv" render={({ field }) => (
                       <FormItem><FormLabel>CRMV</FormLabel><FormControl><Input placeholder="12345/UF" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
+                    <FormField control={form.control} name="especialidade" render={({ field }) => (
+                      <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input placeholder="Ex: Cardiologia" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={form.control} name="email" render={({ field }) => (
                       <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="email@clinica.com" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="telefone" render={({ field }) => (
                       <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
-                    <FormField control={form.control} name="especialidade" render={({ field }) => (
-                      <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input placeholder="Ex: Cardiologia" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
                   </div>
                   
                   <div className="border border-amber-200/50 bg-amber-50/20 dark:bg-amber-950/10 dark:border-amber-900/30 rounded-xl p-5 space-y-4 my-4">
                     <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Acesso e Permissões</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                    <div className="grid grid-cols-1 gap-6 items-end">
                       <FormField control={form.control} name="validade_acesso" render={({ field }) => (
-                        <FormItem><FormLabel>Validade de Acesso do Veterinário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                        <FormItem className="md:w-1/2"><FormLabel>Validade de Acesso do Veterinário no Sistema</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                       )} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                       <FormField control={form.control} name="prontuario_liberado" render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border border-input p-3 bg-white/50 dark:bg-slate-900/50 shadow-sm h-11">
-                          <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado</FormLabel></div>
+                          <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado (Módulo Completo)</FormLabel></div>
                           <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                         </FormItem>
                       )} />
@@ -354,7 +380,10 @@ export default function VeterinariosPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" disabled={form.formState.isSubmitting}>Cadastrar Veterinário</Button>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <Button type="button" variant="outline" onClick={() => form.reset()}>Cancelar</Button>
+                    <Button type="submit" disabled={form.formState.isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white">Cadastrar Veterinário</Button>
+                  </div>
                 </form>
               </Form>
             </CardContent>
@@ -373,46 +402,56 @@ export default function VeterinariosPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleFormSubmit)} className="flex flex-col flex-1 overflow-hidden">
               <div className="flex-1 overflow-y-auto px-6 space-y-6 pb-2">
-              <FormField control={form.control} name="nome" render={({ field }) => (
-                <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="crmv" render={({ field }) => (
-                <FormItem><FormLabel>CRMV</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="telefone" render={({ field }) => (
-                <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="especialidade" render={({ field }) => (
-                <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              
-              <div className="border border-amber-200/50 bg-amber-50/20 dark:bg-amber-950/10 dark:border-amber-900/30 rounded-xl p-5 space-y-4 my-4">
-                <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Acesso e Permissões</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                  <FormField control={form.control} name="validade_acesso" render={({ field }) => (
-                    <FormItem><FormLabel>Validade de Acesso do Veterinário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <FormField control={form.control} name="codVet" render={({ field }) => (
+                    <FormItem className="col-span-1 md:col-span-1"><FormLabel>Código do Veterinário</FormLabel><FormControl><Input disabled {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="nome" render={({ field }) => (
+                    <FormItem className="col-span-1 md:col-span-3"><FormLabel>Nome do Veterinário</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                  <FormField control={form.control} name="prontuario_liberado" render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border border-input p-3 bg-white/50 dark:bg-slate-900/50 shadow-sm h-11">
-                      <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado</FormLabel></div>
-                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                    </FormItem>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField control={form.control} name="crmv" render={({ field }) => (
+                    <FormItem><FormLabel>CRMV</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
-                  <FormField control={form.control} name="validade_prontuario" render={({ field }) => (
-                    <FormItem><FormLabel>Validade da Liberação do Prontuário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                  <FormField control={form.control} name="especialidade" render={({ field }) => (
+                    <FormItem><FormLabel>Especialidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
                 </div>
-              </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField control={form.control} name="email" render={({ field }) => (
+                    <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="telefone" render={({ field }) => (
+                    <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+                
+                <div className="border border-amber-200/50 bg-amber-50/20 dark:bg-amber-950/10 dark:border-amber-900/30 rounded-xl p-5 space-y-4 my-4">
+                  <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Acesso e Permissões</h4>
+                  <div className="grid grid-cols-1 gap-6 items-end">
+                    <FormField control={form.control} name="validade_acesso" render={({ field }) => (
+                      <FormItem className="md:w-1/2"><FormLabel>Validade de Acesso do Veterinário no Sistema</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                    <FormField control={form.control} name="prontuario_liberado" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border border-input p-3 bg-white/50 dark:bg-slate-900/50 shadow-sm h-11">
+                        <div className="space-y-0.5"><FormLabel className="text-sm font-medium cursor-pointer">Prontuário Liberado (Módulo Completo)</FormLabel></div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="validade_prontuario" render={({ field }) => (
+                      <FormItem><FormLabel>Validade da Liberação do Prontuário</FormLabel><FormControl><Input type="date" className="bg-white/50 border-input h-11" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col md:flex-row gap-3 p-6 pt-4 border-t bg-slate-50 dark:bg-slate-900 mt-auto">
-                <Button type="submit">Salvar Alterações</Button>
+              <div className="flex flex-col md:flex-row justify-end gap-3 p-6 pt-4 border-t bg-slate-50 dark:bg-slate-900 mt-auto">
                 <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">Salvar Alterações</Button>
               </div>
             </form>
           </Form>

@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { QrCode, Send, Download, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2, AlertTriangle, ArrowRight, CalendarDays, Star, ChevronsUpDown, Check } from 'lucide-react';
+import { QrCode, Send, Download, Printer, RefreshCw, Loader2, PlusCircle, Stethoscope, FileText, Info, Undo2, Search, PawPrint, CheckCircle2, AlertTriangle, ArrowRight, CalendarDays, Star, ChevronsUpDown, Check, Trash2, Activity, Users } from 'lucide-react';
 import { 
     AlertDialog, 
     AlertDialogAction, 
@@ -44,6 +44,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { Pet, Veterinario, Exam } from '@/lib/types';
 import { usePets } from '@/hooks/use-pets';
@@ -123,6 +124,9 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     const [reportDateFrom, setReportDateFrom] = React.useState('');
     const [reportDateTo, setReportDateTo] = React.useState('');
     const [reportMedicoId, setReportMedicoId] = React.useState('all');
+    
+    // Store origin context when arriving from Prontuário
+    const [backToProntuarioId, setBackToProntuarioId] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         if (isReportOpen) {
@@ -249,7 +253,9 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
         }, 300);
     }, [exams, currentPet, form, toast]);
 
-    const filteredExams = React.useMemo(() => {
+    const [examLimit, setExamLimit] = React.useState(50);
+
+    const baseFilteredExams = React.useMemo(() => {
         let baseExams = exams;
 
         if (urgencyFilter) {
@@ -257,12 +263,20 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
         }
 
         if (!examSearch) return baseExams;
+
         const searchLower = examSearch.toLowerCase();
         return baseExams.filter(e =>
             e.name.toLowerCase().includes(searchLower) ||
-            (e.idExame && e.idExame.toLowerCase().includes(searchLower))
+            (e.idExame && e.idExame.toLowerCase().includes(searchLower)) ||
+            (e.examCode && e.examCode.toLowerCase().includes(searchLower))
         );
     }, [exams, examSearch, currentPet, urgencyFilter]);
+
+    const filteredExams = React.useMemo(() => {
+        return baseFilteredExams.slice(0, examLimit);
+    }, [baseFilteredExams, examLimit]);
+
+    const hasMoreExams = baseFilteredExams.length > examLimit;
 
     // Auto-seleção de veterinário logado
     React.useEffect(() => {
@@ -273,9 +287,14 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
 
     React.useEffect(() => {
         const newPetId = searchParams.get('newPetId');
+        const isFromProntuario = searchParams.get('from') === 'prontuario';
+        
         if (newPetId && pets.some(p => p.id === newPetId)) {
             form.setValue('petId', newPetId);
-            router.replace('/movement', { scroll: false });
+            if (isFromProntuario) {
+                setBackToProntuarioId(newPetId);
+            }
+            router.replace('/movement?mode=guia', { scroll: false });
             setTimeout(() => vetSelectTriggerRef.current?.focus(), 100);
         }
     }, [searchParams, pets, form, router]);
@@ -380,7 +399,16 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                     <Button variant="outline" onClick={() => setIsReportOpen(true)}>
                         <Printer className="mr-2 h-4 w-4" /> Relatório Guias
                     </Button>
-                    <Button variant="outline" onClick={onBack}><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button>
+                    <Button variant="outline" className={backToProntuarioId ? "bg-slate-100 font-medium" : ""} onClick={() => {
+                        if (backToProntuarioId) {
+                            router.push(`/pets/${backToProntuarioId}/prontuario`);
+                        } else {
+                            onBack();
+                        }
+                    }}>
+                        <Undo2 className="mr-2 h-4 w-4" />
+                        {backToProntuarioId ? 'Voltar ao Prontuário' : 'Voltar ao Menu'}
+                    </Button>
                 </div>
             </PageTitle>
 
@@ -466,17 +494,18 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                     render={({ field }) => (
                                         <FormItem>
                                             <div className="flex justify-between items-center mb-2">
-                                                <FormLabel>Exames Solicitados</FormLabel>
+                                                <FormLabel>Exames</FormLabel>
                                                 <div className="flex gap-2">
                                                     {(isGeralRole || isSpecificVet) && (
-                                                        <Popover open={isModeloOpen} onOpenChange={setIsModeloOpen}>
-                                                            <PopoverTrigger asChild>
-                                                                <Button type="button" variant="outline" size="sm" className="h-8 text-xs">
-                                                                    <Star className={cn("mr-2 h-3 w-3", examKits.length > 0 ? "fill-amber-400 text-amber-500" : "")} />
-                                                                    Kits Favoritos
-                                                                    <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-                                                                </Button>
-                                                            </PopoverTrigger>
+                                                        <>
+                                                            <Popover open={isModeloOpen} onOpenChange={setIsModeloOpen}>
+                                                                <PopoverTrigger asChild>
+                                                                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs">
+                                                                        <Star className={cn("mr-2 h-3 w-3", examKits.length > 0 ? "fill-amber-400 text-amber-500" : "")} />
+                                                                        Kits Favoritos
+                                                                        <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                                                    </Button>
+                                                                </PopoverTrigger>
                                                             <PopoverContent className="w-[300px] p-0 shadow-xl border-2" align="end">
                                                                  <div className="flex flex-col bg-background">
                                                                      <div className="p-3 border-b bg-muted/30">
@@ -535,7 +564,11 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                                                      </div>
                                                                  </div>
                                                             </PopoverContent>
-                                                        </Popover>
+                                                            </Popover>
+                                                            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push('/veterinarios?tab=modelos')}>
+                                                                <PlusCircle className="mr-2 h-3 w-3" /> Cadastrar Modelo
+                                                            </Button>
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>
@@ -543,36 +576,50 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                                 <div className="flex flex-col sm:flex-row gap-2">
                                                     <div className="relative flex-1">
                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                        <Input placeholder="Buscar exame..." value={examSearch} onChange={(e) => setExamSearch(e.target.value)} className="pl-10" />
+                                                        <Input placeholder="Filtrar exames por nome ou ID..." value={examSearch} onChange={(e) => { setExamSearch(e.target.value); setExamLimit(50); }} className="pl-10" />
                                                     </div>
-                                                    {(field.value?.length > 0) && (
-                                                        <div className="flex gap-1 shrink-0">
-                                                            <Button
-                                                                type="button"
-                                                                variant={!showOnlySelected ? "default" : "outline"}
-                                                                size="sm"
-                                                                className="h-9 text-xs gap-1.5"
-                                                                onClick={() => setShowOnlySelected(false)}
-                                                            >
-                                                                <Search className="h-3.5 w-3.5" />
-                                                                Ver Todos
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                variant={showOnlySelected ? "default" : "outline"}
-                                                                size="sm"
-                                                                className="h-9 text-xs gap-1.5"
-                                                                onClick={() => setShowOnlySelected(true)}
-                                                            >
-                                                                <Check className="h-3.5 w-3.5" />
-                                                                Selecionados ({field.value.length})
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                    <Button type="button" variant={urgencyFilter ? "destructive" : "outline"} size="sm" onClick={() => setUrgencyFilter(!urgencyFilter)} className="flex items-center gap-2">
-                                                        <AlertTriangle className={urgencyFilter ? "animate-pulse" : "h-4 w-4"} size={16} />
-                                                        {urgencyFilter ? "Apenas Urgentes" : "Filtrar Urgentes"}
-                                                    </Button>
+                                                    <div className="flex gap-1 shrink-0">
+                                                        <Button
+                                                            type="button"
+                                                            variant={!showOnlySelected ? "default" : "outline"}
+                                                            size="sm"
+                                                            className="h-9 text-xs gap-1.5"
+                                                            onClick={() => setShowOnlySelected(false)}
+                                                        >
+                                                            <Search className="h-3.5 w-3.5" />
+                                                            Ver Todos
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant={showOnlySelected ? "default" : "outline"}
+                                                            size="sm"
+                                                            className="h-9 text-xs gap-1.5"
+                                                            onClick={() => setShowOnlySelected(true)}
+                                                        >
+                                                            <Check className="h-3.5 w-3.5" />
+                                                            Selecionados ({field.value?.length || 0})
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            className="h-9 text-xs gap-1.5 bg-red-500 hover:bg-red-600 text-white"
+                                                            onClick={() => {
+                                                                form.setValue('examIds', [], { shouldValidate: true, shouldDirty: true });
+                                                                form.setValue('urgentExamIds', [], { shouldValidate: true, shouldDirty: true });
+                                                                setShowOnlySelected(false);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                            Limpar
+                                                        </Button>
+                                                        {/* Keeping Filtrar Urgentes specific for PetMobile if urgency filter was on previously */}
+                                                        {urgencyFilter && (
+                                                          <Button type="button" variant="destructive" size="sm" onClick={() => setUrgencyFilter(!urgencyFilter)} className="flex items-center gap-2 ml-1 h-9">
+                                                              <AlertTriangle className="animate-pulse" size={16} /> Urgentes
+                                                          </Button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <ScrollArea className="h-48 w-full rounded-md border p-4">
                                                     <div className="space-y-3">
@@ -636,12 +683,26 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
                                                                 <div className="text-center py-8">
                                                                     <p className="text-sm text-muted-foreground">
                                                                         {showOnlySelected 
-                                                                            ? 'Nenhum exame selecionado. Clique em "Selecionados" para ver todos.'
+                                                                            ? 'Nenhum exame selecionado. Clique em "Ver Todos" para listar exames.'
                                                                             : examSearch ? `Nenhum exame encontrado para "${examSearch}".` : 'Nenhum exame disponível.'}
                                                                     </p>
                                                                 </div>
                                                             );
                                                         })()}
+                                                        
+                                                        {!showOnlySelected && hasMoreExams && (
+                                                            <div className="flex justify-center pt-2 pb-1 border-t mt-2">
+                                                                <Button 
+                                                                    type="button" 
+                                                                    variant="ghost" 
+                                                                    size="sm" 
+                                                                    className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                                    onClick={() => setExamLimit(prev => prev + 50)}
+                                                                >
+                                                                    Carregar mais exames ({baseFilteredExams.length - examLimit} restantes)
+                                                                </Button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </ScrollArea>
                                             </div>
@@ -822,81 +883,34 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
     const { user } = useSession();
     const router = useRouter();
     const [petSearch, setPetSearch] = React.useState('');
-    const [selectedPetId, setSelectedPetId] = React.useState('all');
-    const [isGlobalListOpen, setIsGlobalListOpen] = React.useState(false);
-    const [vetFilter, setVetFilter] = React.useState<string>('all');
+    const [selectedPetId, setSelectedPetId] = React.useState('');
+    const [showList, setShowList] = React.useState(true);
 
     const isPrivileged = user?.status === 'Master' || user?.status === 'Administrador' || user?.status === 'MedicoVet Geral';
     
+    // Sort pets alphabetically by name
+    const sortedPets = React.useMemo(() => {
+        return [...pets].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }, [pets]);
+
     const filteredPets = React.useMemo(() => {
-        if (!petSearch) return pets;
+        if (!petSearch) return sortedPets;
         const search = petSearch.toLowerCase();
-        return pets.filter(p => 
-            p.nome.toLowerCase().includes(search) || 
-            p.tutorNome.toLowerCase().includes(search) ||
+        return sortedPets.filter(p => 
+            (p.nome || '').toLowerCase().includes(search) || 
+            (p.tutorNome || '').toLowerCase().includes(search) ||
+            (p.tutorCpf || '').toLowerCase().includes(search) ||
             (p.codPet && p.codPet.toLowerCase().includes(search))
         );
-    }, [pets, petSearch]);
+    }, [sortedPets, petSearch]);
 
-    const veterinarios = React.useMemo(() => {
-        return (users || []).filter(u => 
-            u.status === 'MedicoVet' || 
-            u.status === 'MedicoVet Geral'
-        );
-    }, [users]);
-
-    const globalProntuarios = React.useMemo(() => {
-        if (!prontLoaded || !user) return [];
-        
-        // Regra de Negócio: Médico A não vê de médico B, a não ser que seja ADM ou Geral
-        let filtered = prontuarios;
-        
-        if (!isPrivileged) {
-            filtered = prontuarios.filter(p => p.medico_id === user.id || p.autor_registro_id === user.id);
-        }
-
+    // Opcional: Se "Pacientes com Prontuário" deve listar apenas quem já tem prontuário,
+    // podemos filtrar aqui. Mas em PacienteMobile geralmente mostra todos que o usuário tem acesso
+    // para ele poder criar um "Novo Registro". Vou exibir a mesma lista do filtro.
+    
+    const handleOpenRecord = () => {
         if (selectedPetId && selectedPetId !== 'all') {
-            filtered = filtered.filter(p => p.pet_id === selectedPetId);
-        }
-
-        if (vetFilter !== 'all') {
-            filtered = filtered.filter(p => p.medico_id === vetFilter);
-        }
-
-        return filtered;
-    }, [prontuarios, prontLoaded, user, isPrivileged, vetFilter, selectedPetId]);
-
-    const handleExport = async (format: 'pdf' | 'csv' | 'txt') => {
-        const rows = globalProntuarios.map(pront => {
-            const pet = pets.find(p => p.id === pront.pet_id);
-            const med = veterinarios.find(v => v.id === pront.medico_id);
-            return {
-                'Data Consulta': format ? new Date(pront.data_atendimento).toLocaleDateString('pt-BR') : '',
-                'Médico': med?.nome || 'Não inf.',
-                'Tipo': pront.tipo_atendimento,
-                'Cód_Pet': pet?.codPet || '-', 
-                'Nome do Pet': pet?.nome || '-',
-                'Espécie': pet?.especie || '-',
-                'Raça': pet?.raca || '-',
-                'Desc': pront.descricao_livre || '-'
-            };
-        });
-
-        const selectedPet = pets.find(p => p.id === selectedPetId);
-        const vet = vetFilter === 'all' ? null : veterinarios.find(v => v.id === vetFilter);
-        
-        let title = 'Histórico de Atendimentos';
-        if (selectedPet) title += ` - ${selectedPet.nome}`;
-        if (vet) title += ` (${vet.nome})`;
-
-        const filename = `historico_${selectedPet ? selectedPet.nome.toLowerCase() : 'geral'}`;
-
-        if (format === 'csv') {
-            await exportToCSV(filename, rows);
-        } else if (format === 'txt') {
-            await exportToTXT(filename, rows);
-        } else {
-            await exportToPDF(filename, title, rows);
+            router.push(`/pets/${selectedPetId}/prontuario`);
         }
     };
 
@@ -905,163 +919,137 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
     }
 
     return (
-        <>
+        <div className="container mx-auto p-4 max-w-6xl animate-in fade-in zoom-in-95 duration-300">
             <PageTitle title="Acesso ao Prontuário Digital" description="Selecione um animal para visualizar ou cadastrar atendimentos clínicos.">
-                <Button variant="outline" onClick={onBack}><Undo2 className="mr-2 h-4 w-4" />Voltar ao Menu</Button>
+                <Button variant="outline" className="bg-white" onClick={onBack}>
+                    <Undo2 className="mr-2 h-4 w-4" /> Voltar ao Menu
+                </Button>
             </PageTitle>
 
-            <div className="max-w-2xl mx-auto mt-8">
-                <Card className="border-t-4 border-t-blue-500 shadow-md">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Stethoscope className="w-5 h-5 text-blue-500" /> Buscar Paciente</CardTitle>
-                        <CardDescription>Para iniciar, digite o nome do pet, nome do tutor ou código.</CardDescription>
+            <div className="max-w-2xl mx-auto my-8">
+                <Card className="border shadow-sm">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
+                            <Activity className="w-5 h-5 text-blue-500" /> Buscar Paciente
+                        </CardTitle>
+                        <CardDescription>Para iniciar, digite o nome do pet, tutor, CPF ou código.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Digite para filtrar..." value={petSearch} onChange={(e) => setPetSearch(e.target.value)} className="pl-10 py-6 text-lg" />
-                            </div>
-                            <Select onValueChange={setSelectedPetId} value={selectedPetId}>
-                                <SelectTrigger className="h-14">
-                                    <SelectValue placeholder="Selecione o animal na lista..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all" className="py-3 border-b bg-blue-50/50">
-                                        <div className="flex flex-col">
-                                            <span className="font-semibold text-base text-blue-700">Todos os Animais (Geral)</span>
-                                            <span className="text-sm text-blue-600/70">Lista o histórico de todos os pets</span>
-                                        </div>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                placeholder="Digite para filtrar..." 
+                                value={petSearch}
+                                onChange={(e) => setPetSearch(e.target.value)}
+                                className="pl-9 bg-slate-50"
+                            />
+                        </div>
+                        
+                        <Select value={selectedPetId} onValueChange={setSelectedPetId}>
+                            <SelectTrigger className="bg-white">
+                                <SelectValue placeholder="Selecione o paciente na lista..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {filteredPets.map(pet => (
+                                    <SelectItem key={pet.id} value={pet.id}>
+                                        {pet.nome} - {pet.especie} {pet.raca ? `(${pet.raca})` : ''} - Tutor: {pet.tutorNome}
                                     </SelectItem>
-                                    {filteredPets.length > 0 ? filteredPets.map(p => (
-                                        <SelectItem key={p.id} value={p.id} className="py-3">
-                                            <div className="flex flex-col">
-                                                <span className="font-semibold text-base">{p.nome} <span className="text-xs text-muted-foreground font-normal">({p.especie})</span></span>
-                                                <span className="text-sm text-muted-foreground">Tutor: {p.tutorNome}</span>
-                                            </div>
-                                        </SelectItem>
-                                    )) : (
-                                        <div className="p-4 text-center text-sm text-muted-foreground">Nenhum registro encontrado.</div>
-                                    )}
-                                </SelectContent>
-                            </Select>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <div className="flex gap-4 pt-2">
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                className="w-1/2 bg-slate-50 hover:bg-slate-100" 
+                                onClick={() => setShowList(!showList)}
+                            >
+                                <Users className="w-4 h-4 mr-2 text-slate-500" />
+                                {showList ? 'Ocultar Lista' : 'Mostrar Lista'}
+                            </Button>
+                            <Button 
+                                type="button" 
+                                className="w-1/2 bg-[#7FA4EA] hover:bg-[#6c8ecd] text-white shadow-sm" 
+                                disabled={!selectedPetId}
+                                onClick={handleOpenRecord}
+                            >
+                                <Activity className="w-4 h-4 mr-2" />
+                                Abrir Registro Clínico
+                            </Button>
                         </div>
                     </CardContent>
-                    <CardFooter className="bg-slate-50 pt-6 flex justify-between gap-4">
-                        <Button 
-                            variant="outline"
-                            onClick={() => setIsGlobalListOpen(true)}
-                        >
-                            <FileText className="w-4 h-4 mr-2" /> Listar Registros Clínicos
-                        </Button>
-                        <Button 
-                            size="lg" 
-                            disabled={!selectedPetId || selectedPetId === 'all'}
-                            onClick={() => router.push(`/pets/${selectedPetId}/prontuario`)}
-                            className="bg-blue-600 hover:bg-blue-700"
-                        >
-                            <FileText className="w-5 h-5 mr-2" /> Abrir Registro Clínico
-                        </Button>
-                    </CardFooter>
                 </Card>
             </div>
 
-            <Dialog open={isGlobalListOpen} onOpenChange={setIsGlobalListOpen}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader className="flex flex-row items-center justify-between border-b pb-4">
-                        <DialogTitle className="flex items-center gap-2">
-                            <Stethoscope className="w-6 h-6 text-blue-600" />
-                            Histórico de Atendimentos Clínicos - Geral
-                        </DialogTitle>
-                        <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} className="h-8">
-                                <Download className="w-4 h-4 mr-2" /> PDF
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleExport('csv')} className="h-8">
-                                <Download className="w-4 h-4 mr-2" /> CSV
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleExport('txt')} className="h-8">
-                                <Download className="w-4 h-4 mr-2" /> TXT
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => {
-                                setIsGlobalListOpen(false);
-                                setSelectedPetId('all');
-                                setPetSearch('');
-                            }} className="h-8">
-                                <Undo2 className="w-4 h-4 mr-2" /> Voltar
-                            </Button>
-                        </div>
-                    </DialogHeader>
-
-                    <div className="space-y-6 mt-4">
-                        {isPrivileged && (
-                            <div className="flex items-center gap-4 p-4 bg-blue-50/50 border border-blue-100 rounded-lg">
-                                <div className="w-full max-w-sm space-y-1.5">
-                                    <Label>Filtrar por Médico</Label>
-                                    <Select value={vetFilter} onValueChange={setVetFilter}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Todos os Médicos" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Todos os Médicos</SelectItem>
-                                            {veterinarios.map(v => (
-                                                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="text-sm text-slate-500 pt-7">
-                                    {globalProntuarios.length} registros encontrados.
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="border rounded-lg overflow-hidden">
-                            <ScrollArea className="h-[500px]">
-                                {globalProntuarios.length === 0 ? (
-                                    <div className="p-12 text-center text-muted-foreground">Nenhum registro clínico encontrado para os critérios selecionados.</div>
+            {showList && (
+                <div className="mt-12 animate-in slide-in-from-bottom-4 duration-500">
+                    <h3 className="text-[15px] font-bold flex items-center gap-2 mb-4 text-[#7FA4EA]">
+                        <Users className="w-5 h-5" /> Pacientes com Prontuário
+                    </h3>
+                    
+                    <div className="border rounded-md bg-white shadow-sm overflow-x-auto">
+                        <Table className="min-w-[700px]">
+                            <TableHeader className="bg-slate-50/80">
+                                <TableRow>
+                                    <TableHead className="font-semibold text-slate-600">
+                                        Nome do Paciente ↑↓
+                                    </TableHead>
+                                    <TableHead className="font-semibold text-slate-600">
+                                        CPF / Código ↑↓
+                                    </TableHead>
+                                    <TableHead className="text-right font-semibold text-slate-600 w-[300px]">
+                                        Ações
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredPets.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                                            Nenhum paciente encontrado.
+                                        </TableCell>
+                                    </TableRow>
                                 ) : (
-                                    <div className="divide-y">
-                                        {globalProntuarios.map((pront) => {
-                                            const pet = pets.find(p => p.id === pront.pet_id);
-                                            const med = users.find(u => u.id === pront.medico_id);
-                                            return (
-                                                <div key={pront.id} className="p-4 hover:bg-slate-50 transition-colors">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div>
-                                                            <div className="font-bold text-slate-900 flex items-center gap-2">
-                                                                <span className="text-blue-600">{pront.tipo_atendimento}</span>
-                                                                <span className="text-slate-300">|</span>
-                                                                <span>{pet?.nome || 'Pet não encontrado'}</span>
-                                                            </div>
-                                                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                                                <CalendarDays className="w-3 h-3" /> 
-                                                                {new Date(pront.data_atendimento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                                <span className="text-slate-300">•</span>
-                                                                <span className="font-medium">Médico: {med?.nome || pront.medico_id || 'Não informado'}</span>
-                                                            </div>
-                                                        </div>
-                                                        <Button size="sm" variant="ghost" className="text-blue-600 h-8 px-2" onClick={() => {
-                                                            setIsGlobalListOpen(false);
-                                                            router.push(`/pets/${pront.pet_id}/prontuario`);
-                                                        }}>
-                                                            Ver Detalhes <ArrowRight className="w-3 h-3 ml-1" />
-                                                        </Button>
-                                                    </div>
-                                                    <div className="text-sm text-slate-600 line-clamp-2 italic bg-slate-50/50 p-2 rounded">
-                                                        {pront.descricao_livre || 'Sem descrição clínica...'}
-                                                    </div>
+                                    filteredPets.map(pet => (
+                                        <TableRow key={pet.id} className="hover:bg-slate-50/50">
+                                            <TableCell>
+                                                <div className="text-sm font-medium text-slate-800">{pet.nome}</div>
+                                                <div className="text-[10px] text-muted-foreground">Tutor: {pet.tutorNome}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm text-slate-700">CPF: {pet.tutorCpf || 'N/A'}</div>
+                                                <div className="text-[10px] text-muted-foreground">Cód: {pet.codPet || 'N/A'}</div>
+                                            </TableCell>
+                                            <TableCell className="text-right py-2">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        className="text-slate-600 bg-white shadow-sm hover:bg-slate-50 border-slate-200 h-8"
+                                                        onClick={() => router.push(`/pets/${pet.id}/prontuario`)}
+                                                    >
+                                                        <FileText className="w-3.5 h-3.5 mr-1.5" /> Histórico
+                                                    </Button>
+                                                    <Button 
+                                                        variant="default" 
+                                                        size="sm"
+                                                        className="bg-[#4666F6] hover:bg-[#3b58d9] shadow-sm text-white h-8"
+                                                        onClick={() => router.push(`/pets/${pet.id}/prontuario?tab=novo`)}
+                                                    >
+                                                        <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Novo Registro
+                                                    </Button>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
                                 )}
-                            </ScrollArea>
-                        </div>
+                            </TableBody>
+                        </Table>
                     </div>
-                </DialogContent>
-            </Dialog>
-        </>
+                </div>
+            )}
+        </div>
     );
 }
 

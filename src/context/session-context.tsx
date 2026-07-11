@@ -25,11 +25,11 @@ function normalizeUser(u: any): Usuario | null {
     if (!u) return null;
     let status = u.status;
     
-    // Normalização agressiva para evitar problemas de acentuação/case/migração
-    if (status === 'Médico' || status === 'Medico' || status === 'medico' || status === 'Veterinário') status = 'MedicoVet';
-    if (status === 'Médico Geral' || status === 'Medico Geral' || status === 'Veterinário Geral') status = 'MedicoVet Geral';
-    if (status === 'Secretária' || status === 'Secretaria') status = 'Secretária';
-    if (status === 'Secretária Geral' || status === 'Secretaria Geral') status = 'Secretária Geral';
+    // Normalização agressiva para nova estrutura de UserRole
+    if (status === 'Médico' || status === 'Medico' || status === 'medico' || status === 'MedicoVet' || status === 'MedicoVet Geral' || status === 'Veterinário Geral') status = 'Veterinário';
+    if (status === 'Secretaria') status = 'Secretária';
+    if (status === 'Secretaria Geral') status = 'Secretária Geral';
+    if (status === 'Leitor Geral') status = 'Leitor';
     
     console.log(`Normalizando usuário: ${u.email}, Perfil original: ${u.status}, Perfil normalizado: ${status}`);
     return { ...u, status };

@@ -24,7 +24,8 @@ import {
   FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
-  Edit
+  Edit,
+  MapPin
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -66,6 +67,9 @@ export default function AgendaPage() {
     error: agendaError,
     fetchAgenda, 
     addAgenda, 
+    addAgendaBloqueio,
+    fetchBloqueios,
+    deleteAgendaBloqueio,
     updateAgenda,
     updateAgendaStatus, 
     deleteAgenda,
@@ -76,10 +80,23 @@ export default function AgendaPage() {
 
   // State variables
   const [activeTab, setActiveTab] = useState('diaria');
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab) {
+        setActiveTab(tab);
+      }
+    }
+  }, []);
+
   const [selectedStartDate, setSelectedStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedEndDate, setSelectedEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedMedicoId, setSelectedMedicoId] = useState('all');
   const [selectedTipo, setSelectedTipo] = useState('all');
+  const [selectedBlockStatus, setSelectedBlockStatus] = useState('all');
+  const [selectedLocalFilter, setSelectedLocalFilter] = useState('');
   
 
   // Search patient field in scheduling form
@@ -93,6 +110,7 @@ export default function AgendaPage() {
   const [formDate, setFormDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [formTime, setFormTime] = useState('09:00');
   const [formTipo, setFormTipo] = useState<'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia'>('Consulta');
+  const [formLocal, setFormLocal] = useState('');
   const [formTutorCpf, setFormTutorCpf] = useState('');
   const [formTutorNome, setFormTutorNome] = useState('');
   const [formPetNome, setFormPetNome] = useState('');
@@ -108,8 +126,18 @@ export default function AgendaPage() {
   const [editTutorNome, setEditTutorNome] = useState('');
   const [editPetNome, setEditPetNome] = useState('');
   const [editTutorTelefone, setEditTutorTelefone] = useState('');
-  const [editStatus, setEditStatus] = useState<'Agendado' | 'Cancelado' | 'Realizado'>('Agendado');
+  const [editStatus, setEditStatus] = useState<'Agendado' | 'Cancelado' | 'Realizado' | 'Bloqueado'>('Agendado');
   const [editTipo, setEditTipo] = useState<'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia'>('Consulta');
+  const [editLocal, setEditLocal] = useState('');
+
+  // Block Schedule Form State
+  const [blockMedicoId, setBlockMedicoId] = useState('all');
+  const [blockTipo, setBlockTipo] = useState<'hora' | 'dia' | 'manha' | 'tarde' | 'semana' | 'mes'>('hora');
+  const [blockDate, setBlockDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [blockDateFim, setBlockDateFim] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [blockHoraInicio, setBlockHoraInicio] = useState('08:00');
+  const [blockHoraFim, setBlockHoraFim] = useState('09:00');
+  const [blockLocal, setBlockLocal] = useState('');
 
   // Report Filters
   const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -117,6 +145,16 @@ export default function AgendaPage() {
   const [reportMedicoId, setReportMedicoId] = useState('all');
   const [reportStatus, setReportStatus] = useState('all');
   const [reportTipo, setReportTipo] = useState('all');
+
+  // Block List Modal State
+  const [isBlockListModalOpen, setIsBlockListModalOpen] = useState(false);
+  const [blockListModalMedicoId, setBlockListModalMedicoId] = useState('');
+  const [blockListData, setBlockListData] = useState<any[]>([]);
+  const [isBlockListLoading, setIsBlockListLoading] = useState(false);
+  
+  // Header Filters for Block List
+  const [blockFilterMedicoId, setBlockFilterMedicoId] = useState('all');
+  const [blockFilterMonth, setBlockFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   // Trigger search on mount and when filters change
   useEffect(() => {
@@ -144,6 +182,28 @@ export default function AgendaPage() {
       title: "Relatório Atualizado",
       description: "Os dados foram carregados com base nos filtros informados."
     });
+  };
+
+  const handleOpenBlockList = async (medicoId: string, monthPrefix?: string) => {
+    setBlockListModalMedicoId(medicoId);
+    setIsBlockListModalOpen(true);
+    setIsBlockListLoading(true);
+    const data = await fetchBloqueios(medicoId);
+    console.log("[handleOpenBlockList] Fetched data:", data, "MonthPrefix:", monthPrefix);
+    
+    // Filter by month if provided (e.g. "2026-07")
+    if (monthPrefix) {
+      const filtered = data.filter((b: any) => {
+        const match = b.data_inicio.startsWith(monthPrefix) || b.data_fim.startsWith(monthPrefix);
+        console.log(`[handleOpenBlockList] Filtering ${b.data_inicio} with ${monthPrefix}: ${match}`);
+        return match;
+      });
+      setBlockListData(filtered);
+    } else {
+      setBlockListData(data);
+    }
+    
+    setIsBlockListLoading(false);
   };
 
   // Perform pet/tutor lookup
@@ -211,6 +271,7 @@ export default function AgendaPage() {
     setFormTutorNome('');
     setFormPetNome('');
     setFormTutorTelefone('');
+    setFormLocal('');
   };
 
   // Submit appointment
@@ -246,7 +307,8 @@ export default function AgendaPage() {
       tutorNome: formTutorNome,
       petNome: formPetNome,
       tutorTelefone: formTutorTelefone,
-      tipo: formTipo
+      tipo: formTipo,
+      local: formLocal
     });
 
     if (result.success) {
@@ -258,6 +320,7 @@ export default function AgendaPage() {
       setFormMedicoId('');
       setFormTime('09:00');
       setFormTipo('Consulta');
+      setFormLocal('');
       handleClearLookup();
       // Refresh list
       const start = `${selectedStartDate}T00:00:00.000Z`;
@@ -265,11 +328,24 @@ export default function AgendaPage() {
       fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
       setActiveTab('diaria');
     } else {
-      toast({
-        title: "Falha ao agendar",
-        description: result.message || "Ocorreu um erro no servidor.",
-        variant: "destructive"
-      });
+      if (result.isBlocked) {
+        toast({
+          title: "Horário Bloqueado",
+          description: result.message,
+          variant: "destructive",
+          action: (
+            <Button variant="outline" size="sm" onClick={() => handleOpenBlockList(formMedicoId)}>
+              Ver bloqueios
+            </Button>
+          )
+        });
+      } else {
+        toast({
+          title: "Falha ao agendar",
+          description: result.message || "Ocorreu um erro no servidor.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -360,6 +436,7 @@ export default function AgendaPage() {
     setEditTutorTelefone(item.tutorTelefone || '');
     setEditStatus(item.status);
     setEditTipo(item.tipo || 'Consulta');
+    setEditLocal(item.local || '');
     setIsEditDialogOpen(true);
   };
 
@@ -396,7 +473,8 @@ export default function AgendaPage() {
       petNome: editPetNome,
       tutorTelefone: editTutorTelefone,
       status: editStatus,
-      tipo: editTipo
+      tipo: editTipo,
+      local: editLocal
     });
 
     if (result.success) {
@@ -412,12 +490,102 @@ export default function AgendaPage() {
       const end = `${selectedEndDate}T23:59:59.999Z`;
       fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
     } else {
+      if (result.isBlocked) {
+        toast({
+          title: "Horário Bloqueado",
+          description: result.message,
+          variant: "destructive",
+          action: (
+            <Button variant="outline" size="sm" onClick={() => handleOpenBlockList(editMedicoId)}>
+              Ver bloqueios
+            </Button>
+          )
+        });
+      } else {
+        toast({
+          title: "Falha ao atualizar",
+          description: result.message || "Ocorreu um erro no servidor.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleBlockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const result = await addAgendaBloqueio({
+      medicoId: blockMedicoId === 'all' ? null : blockMedicoId,
+      tipoBloqueio: blockTipo,
+      dataInicio: blockDate,
+      dataFim: (blockTipo === 'semana' || blockTipo === 'mes' || blockTipo === 'dia') ? blockDateFim : blockDate,
+      horaInicio: (blockTipo === 'hora') ? blockHoraInicio : null,
+      horaFim: (blockTipo === 'hora') ? blockHoraFim : null,
+      local: blockLocal
+    });
+
+    if (result.success) {
       toast({
-        title: "Falha ao atualizar",
+        title: "Horário bloqueado!",
+        description: "O bloqueio foi registrado com sucesso."
+      });
+      // Refresh list
+      const start = `${selectedStartDate}T00:00:00.000Z`;
+      const end = `${selectedEndDate}T23:59:59.999Z`;
+      fetchAgenda({ startDate: start, endDate: end, medicoId: selectedMedicoId, tipo: selectedTipo });
+      setActiveTab('diaria');
+    } else {
+      toast({
+        title: "Falha ao bloquear",
         description: result.message || "Ocorreu um erro no servidor.",
         variant: "destructive"
       });
     }
+  };
+
+  const handleDeleteBlock = async (id: string) => {
+    if (!confirm("Tem certeza que deseja apagar este bloqueio?")) return;
+    const res = await deleteAgendaBloqueio(id);
+    if (res.success) {
+      toast({ title: "Excluído", description: "O bloqueio foi removido com sucesso." });
+      // Atualizar lista da modal
+      const data = await fetchBloqueios(blockListModalMedicoId);
+      setBlockListData(data);
+    } else {
+      toast({ title: "Erro", description: res.message, variant: "destructive" });
+    }
+  };
+
+  const handlePrintBlocks = () => {
+    if (blockListData.length === 0) {
+      toast({ title: "Sem dados", description: "Não há bloqueios para imprimir.", variant: "destructive" });
+      return;
+    }
+
+    const headers = ['Médico', 'Tipo', 'Início', 'Término', 'Horário', 'Local'];
+    const rows = blockListData.map(b => [
+      b.medico ? b.medico.nome : 'Geral (Todos)',
+      b.tipo_bloqueio,
+      format(parseISO(b.data_inicio), 'dd/MM/yyyy'),
+      format(parseISO(b.data_fim), 'dd/MM/yyyy'),
+      b.hora_inicio ? `${b.hora_inicio.substring(0,5)} às ${b.hora_fim.substring(0,5)}` : '-',
+      b.local || '-'
+    ]);
+
+    const reportData = {
+      title: "Relatório de Bloqueios Ativos",
+      subtitle: "Histórico de bloqueios da agenda",
+      filters: [
+        { label: "Data de Emissão", value: format(new Date(), 'dd/MM/yyyy HH:mm') },
+        { label: "Bloqueios de", value: blockListModalMedicoId === 'all' || !blockListModalMedicoId ? 'Todos os Médicos (Geral)' : veterinarios.find(v => v.id === blockListModalMedicoId)?.nome || 'Médico Específico' }
+      ],
+      headers,
+      rows,
+      backUrl: '/agenda?tab=bloquear'
+    };
+
+    localStorage.setItem('print-report-data', JSON.stringify(reportData));
+    router.push('/print/report');
   };
 
   // Export report to CSV
@@ -431,7 +599,7 @@ export default function AgendaPage() {
       return;
     }
 
-    const headers = ['Data Agendamento', 'Hora', 'Tipo', 'Veterinario', 'CRMV', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status'];
+    const headers = ['Data Agendamento', 'Hora', 'Tipo', 'Veterinario', 'CRMV', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status', 'Criado Por'];
     const rows = agenda.map(item => {
       const dateObj = parseISO(item.dataAgendamento);
       const dataFormatada = format(dateObj, 'dd/MM/yyyy');
@@ -446,7 +614,8 @@ export default function AgendaPage() {
         item.tutorNome,
         item.tutorCpf,
         item.tutorTelefone || '',
-        item.status
+        item.status,
+        item.criador?.nome || 'Sistema'
       ];
     });
 
@@ -473,7 +642,7 @@ export default function AgendaPage() {
       return;
     }
 
-    const headers = ['Data/Hora', 'Tipo', 'Veterinário', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status'];
+    const headers = ['Data/Hora', 'Tipo', 'Veterinário', 'Pet', 'Tutor', 'CPF Tutor', 'Telefone', 'Status', 'Atendente'];
     const rows = filteredReportAgenda.map(item => {
       const dateObj = parseISO(item.dataAgendamento);
       const dataStr = format(dateObj, 'dd/MM/yyyy HH:mm');
@@ -485,7 +654,8 @@ export default function AgendaPage() {
         item.tutorNome,
         item.tutorCpf,
         item.tutorTelefone || '-',
-        item.status
+        item.status,
+        item.criador?.nome || '-'
       ];
     });
 
@@ -537,7 +707,7 @@ export default function AgendaPage() {
       const medicoLabel = medicoObj ? medicoObj.nome : 'Todos';
       const tipoLabel = selectedTipo === 'all' ? 'Todos' : selectedTipo;
 
-      const headers = ['Hora', 'Tipo', 'Nome do Pet', 'CPF Tutor', 'Nome Tutor', 'Médico', 'Situação'];
+      const headers = ['Hora', 'Tipo', 'Nome do Pet', 'CPF Tutor', 'Nome Tutor', 'Médico', 'Situação', 'Atendente'];
 
       const rows = agenda.map(item => {
         const horaStr = format(parseISO(item.dataAgendamento), 'HH:mm');
@@ -553,7 +723,8 @@ export default function AgendaPage() {
           item.tutorCpf || '',
           tutorCell,
           medicoCell,
-          item.status || ''
+          item.status || '',
+          item.criador?.nome || '-'
         ];
       });
 
@@ -641,14 +812,18 @@ export default function AgendaPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full print:hidden">
-        <TabsList className="grid w-full grid-cols-3 md:w-[600px] mb-6">
+        <TabsList className="grid w-full grid-cols-4 md:w-[700px] mb-6">
           <TabsTrigger value="diaria">
             <CalendarDays className="w-4 h-4 mr-2" />
-            Visualizar Agenda
+            Agenda Diária
           </TabsTrigger>
           <TabsTrigger value="novo">
             <Plus className="w-4 h-4 mr-2" />
             Novo Agendamento
+          </TabsTrigger>
+          <TabsTrigger value="bloquear">
+            <X className="w-4 h-4 mr-2" />
+            Bloquear
           </TabsTrigger>
           <TabsTrigger value="relatorio">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -665,60 +840,86 @@ export default function AgendaPage() {
                   <CardTitle>Filtros da Agenda</CardTitle>
                   <CardDescription>Escolha o período e o veterinário para visualizar as consultas programadas.</CardDescription>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium mr-1">Período:</span>
-                    <Input 
-                      type="date" 
-                      value={selectedStartDate} 
-                      onChange={(e) => setSelectedStartDate(e.target.value)}
-                      className="w-[140px] h-9 shadow-sm"
-                    />
-                    <span className="text-sm text-muted-foreground">até</span>
-                    <Input 
-                      type="date" 
-                      value={selectedEndDate} 
-                      onChange={(e) => setSelectedEndDate(e.target.value)}
-                      className="w-[140px] h-9 shadow-sm"
-                    />
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium mr-1">Período:</span>
+                      <Input 
+                        type="date" 
+                        value={selectedStartDate} 
+                        onChange={(e) => setSelectedStartDate(e.target.value)}
+                        className="w-[140px] h-9 shadow-sm"
+                      />
+                      <span className="text-sm text-muted-foreground">até</span>
+                      <Input 
+                        type="date" 
+                        value={selectedEndDate} 
+                        onChange={(e) => setSelectedEndDate(e.target.value)}
+                        className="w-[140px] h-9 shadow-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Médico:</span>
+                      <Select value={selectedMedicoId} onValueChange={setSelectedMedicoId}>
+                        <SelectTrigger className="w-[200px] h-9 shadow-sm">
+                          <SelectValue placeholder="Todos os Médicos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os Médicos</SelectItem>
+                          {veterinarios.map(v => (
+                            <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Tipo:</span>
+                      <Select value={selectedTipo} onValueChange={setSelectedTipo}>
+                        <SelectTrigger className="w-[140px] h-9 shadow-sm">
+                          <SelectValue placeholder="Todos os Tipos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os Tipos</SelectItem>
+                          <SelectItem value="Consulta">Consulta</SelectItem>
+                          <SelectItem value="Retorno">Retorno</SelectItem>
+                          <SelectItem value="Exame">Exame</SelectItem>
+                          <SelectItem value="Cirurgia">Cirurgia</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Médico:</span>
-                    <Select value={selectedMedicoId} onValueChange={setSelectedMedicoId}>
-                      <SelectTrigger className="w-[200px] h-9 shadow-sm">
-                        <SelectValue placeholder="Todos os Médicos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os Médicos</SelectItem>
-                        {veterinarios.map(v => (
-                          <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Bloqueio:</span>
+                      <Select value={selectedBlockStatus} onValueChange={setSelectedBlockStatus}>
+                        <SelectTrigger className="w-[140px] h-9 shadow-sm">
+                          <SelectValue placeholder="Todos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos</SelectItem>
+                          <SelectItem value="bloqueados">Bloqueados</SelectItem>
+                          <SelectItem value="livres">Livres</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Local:</span>
+                      <Input 
+                        placeholder="Local agendado..."
+                        value={selectedLocalFilter}
+                        onChange={(e) => setSelectedLocalFilter(e.target.value)}
+                        className="w-[200px] h-9 shadow-sm"
+                      />
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      className="h-9 shadow-sm gap-2 border-primary/20 hover:bg-primary/5 text-primary"
+                      onClick={handlePrintDailyAgendaPDF}
+                    >
+                      <Printer className="w-4 h-4" />
+                      Imprimir PDF do Período
+                    </Button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Tipo:</span>
-                    <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-                      <SelectTrigger className="w-[140px] h-9 shadow-sm">
-                        <SelectValue placeholder="Todos os Tipos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os Tipos</SelectItem>
-                        <SelectItem value="Consulta">Consulta</SelectItem>
-                        <SelectItem value="Retorno">Retorno</SelectItem>
-                        <SelectItem value="Exame">Exame</SelectItem>
-                        <SelectItem value="Cirurgia">Cirurgia</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    className="h-9 shadow-sm gap-2 border-primary/20 hover:bg-primary/5 text-primary"
-                    onClick={handlePrintDailyAgendaPDF}
-                  >
-                    <Printer className="w-4 h-4" />
-                    Imprimir PDF da Agenda
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -732,7 +933,7 @@ export default function AgendaPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="font-bold w-[100px]">Hora</TableHead>
+                        <TableHead className="font-bold w-[120px]">Data/Hora</TableHead>
                         <TableHead className="font-bold">Tipo</TableHead>
                         <TableHead className="font-bold">Nome do Pet</TableHead>
                         <TableHead className="font-bold">CPF Tutor</TableHead>
@@ -743,8 +944,15 @@ export default function AgendaPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {agenda.map((item) => {
-                        const horaStr = format(parseISO(item.dataAgendamento), 'HH:mm');
+                      {agenda.filter(item => {
+                        if (selectedBlockStatus === 'bloqueados' && item.status !== 'Bloqueado') return false;
+                        if (selectedBlockStatus === 'livres' && item.status === 'Bloqueado') return false;
+                        if (selectedLocalFilter && !item.local?.toLowerCase().includes(selectedLocalFilter.toLowerCase())) return false;
+                        return true;
+                      }).map((item) => {
+                        const dataObj = parseISO(item.dataAgendamento);
+                        const dataStr = format(dataObj, 'dd/MM/yyyy');
+                        const horaStr = format(dataObj, 'HH:mm');
                         const isNewPet = !item.petId;
                         
                         return (
@@ -752,13 +960,22 @@ export default function AgendaPage() {
                             item.status === 'Realizado' 
                               ? 'bg-green-500/5 hover:bg-green-500/10' 
                               : item.status === 'Cancelado' 
-                              ? 'bg-red-500/5 hover:bg-red-500/10 opacity-70' 
+                              ? 'bg-red-500/5 hover:bg-red-500/10 opacity-70'
+                              : item.status === 'Bloqueado'
+                              ? 'bg-slate-100/50 hover:bg-slate-100 opacity-80'
                               : ''
                           }>
-                            <TableCell className="font-semibold text-primary">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-4 h-4 text-blue-500 shrink-0" />
-                                {horaStr}
+                            <TableCell>
+                              <div className="flex flex-col gap-1 text-xs">
+                                <span className="font-medium text-foreground/80">{dataStr}</span>
+                                <div className="flex items-center gap-1.5 font-bold text-primary">
+                                  <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                  {horaStr}
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+                                  <MapPin className="w-3 h-3 text-red-500 shrink-0" />
+                                  <span>{item.local || 'Clínica'}</span>
+                                </div>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -821,6 +1038,8 @@ export default function AgendaPage() {
                                     ? 'bg-green-50 text-green-600 border-green-200' 
                                     : item.status === 'Cancelado' 
                                     ? 'bg-red-50 text-red-600 border-red-200' 
+                                    : item.status === 'Bloqueado'
+                                    ? 'bg-slate-100 text-slate-500 border-slate-300'
                                     : 'bg-blue-50 text-blue-600 border-blue-200'
                                 }`}
                               >
@@ -878,71 +1097,86 @@ export default function AgendaPage() {
                                   </>
                                 ) : (
                                   <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 text-xs text-muted-foreground hover:text-primary px-2"
-                                      onClick={async () => {
-                                        // Verificar se o Pet já foi cadastrado no banco
-                                        let finalPetId = item.petId;
-                                        if (!finalPetId) {
-                                          const { data: foundPets } = await supabase
-                                            .from('pet_pets')
-                                            .select('id')
-                                            .eq('empresa_id', item.empresaId)
-                                            .eq('tutor_cpf', item.tutorCpf)
-                                            .ilike('nome', item.petNome.trim())
-                                            .limit(1);
+                                      {item.status !== 'Bloqueado' && (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-8 text-xs text-muted-foreground hover:text-primary px-2"
+                                          onClick={async () => {
+                                            // Verificar se o Pet já foi cadastrado no banco
+                                            let finalPetId = item.petId;
+                                            if (!finalPetId) {
+                                              const { data: foundPets } = await supabase
+                                                .from('pet_pets')
+                                                .select('id')
+                                                .eq('empresa_id', item.empresaId)
+                                                .eq('tutor_cpf', item.tutorCpf)
+                                                .ilike('nome', item.petNome.trim())
+                                                .limit(1);
 
-                                          if (foundPets && foundPets.length > 0) {
-                                            finalPetId = foundPets[0].id;
+                                              if (foundPets && foundPets.length > 0) {
+                                                finalPetId = foundPets[0].id;
+                                              }
+                                            }
+                                            
+                                            if (finalPetId) {
+                                              router.push(`/pets?editPetId=${finalPetId}`);
+                                            } else {
+                                              router.push(`/pets?prefill=true&tutorCpf=${item.tutorCpf}&tutorNome=${item.tutorNome}&tutorTelefone=${item.tutorTelefone || ''}&petNome=${item.petNome}`);
+                                            }
+                                          }}
+                                        >
+                                          Ficha
+                                        </Button>
+                                      )}
+
+                                      {item.status === 'Bloqueado' ? (
+                                        <Button 
+                                          size="sm" 
+                                          variant="outline" 
+                                          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 h-8 text-xs px-2.5 shadow-sm"
+                                          onClick={() => handleStartEdit(item)}
+                                          title="Editar Bloqueio"
+                                        >
+                                          <Edit className="w-3.5 h-3.5 mr-1" />
+                                          Editar Bloqueio
+                                        </Button>
+                                      ) : (
+                                        <Button 
+                                          size="sm" 
+                                          variant="outline" 
+                                          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 h-8 text-xs px-2.5 shadow-sm"
+                                          onClick={() => handleStartEdit(item)}
+                                          title="Editar Agendamento"
+                                        >
+                                          <Edit className="w-3.5 h-3.5 mr-1" />
+                                          Editar
+                                        </Button>
+                                      )}
+
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost" 
+                                        className="text-red-500 hover:text-red-700 h-8 px-2"
+                                        onClick={async () => {
+                                          if (confirm(item.status === 'Bloqueado' ? "Deseja remover o bloqueio deste horário?" : "Excluir definitivamente este registro da agenda?")) {
+                                            const res = await deleteAgenda(item.id);
+                                            if (res.success) {
+                                              toast({ title: "Excluído", description: "Registro removido." });
+                                              fetchAgenda({ 
+                                                startDate: `${selectedStartDate}T00:00:00.000Z`, 
+                                                endDate: `${selectedEndDate}T23:59:59.999Z`, 
+                                                medicoId: selectedMedicoId,
+                                                tipo: selectedTipo
+                                              });
+                                            }
                                           }
-                                        }
-                                        
-                                        if (finalPetId) {
-                                          router.push(`/pets?editPetId=${finalPetId}`);
-                                        } else {
-                                          router.push(`/pets?prefill=true&tutorCpf=${item.tutorCpf}&tutorNome=${item.tutorNome}&tutorTelefone=${item.tutorTelefone || ''}&petNome=${item.petNome}`);
-                                        }
-                                      }}
-                                    >
-                                      Ficha
-                                    </Button>
-
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline" 
-                                      className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 h-8 text-xs px-2.5 shadow-sm"
-                                      onClick={() => handleStartEdit(item)}
-                                      title="Editar Agendamento"
-                                    >
-                                      <Edit className="w-3.5 h-3.5 mr-1" />
-                                      Editar
-                                    </Button>
-
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className="text-red-500 hover:text-red-700 h-8 px-2"
-                                      onClick={async () => {
-                                        if (confirm("Excluir definitivamente este registro da agenda?")) {
-                                          const res = await deleteAgenda(item.id);
-                                          if (res.success) {
-                                            toast({ title: "Excluído", description: "Agendamento removido." });
-                                            fetchAgenda({ 
-                                              startDate: `${selectedStartDate}T00:00:00.000Z`, 
-                                              endDate: `${selectedEndDate}T23:59:59.999Z`, 
-                                              medicoId: selectedMedicoId,
-                                              tipo: selectedTipo
-                                            });
-                                          }
-                                        }
-                                      }}
-                                      title="Excluir Registro"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </>
+                                        }}
+                                        title={item.status === 'Bloqueado' ? "Remover Bloqueio" : "Excluir Registro"}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </>
                                 )}
                               </div>
                             </TableCell>
@@ -955,9 +1189,9 @@ export default function AgendaPage() {
               ) : (
                 <div className="text-center py-16 border-2 border-dashed border-muted rounded-xl bg-muted/10">
                   <Calendar className="mx-auto h-12 w-12 text-muted-foreground/60 mb-2" />
-                  <h3 className="text-lg font-semibold text-foreground/80">Sem consultas para este dia</h3>
+                  <h3 className="text-lg font-semibold text-foreground/80">Sem consultas para este periodo</h3>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
-                    Não há atendimentos agendados na data ou médico informados. Clique em "Novo Agendamento" para adicionar.
+                    Não há atendimentos agendados no período ou médico informados. Clique em "Novo Agendamento" para adicionar.
                   </p>
                   <Button 
                     className="mt-4 bg-primary/90 hover:bg-primary"
@@ -968,6 +1202,171 @@ export default function AgendaPage() {
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {/* ─── TAB: BLOQUEAR ─── */}
+        <TabsContent value="bloquear" className="space-y-6">
+          <Card className="border-primary/10 shadow-sm bg-card/60">
+            <CardHeader className="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-4">
+              <div>
+                <CardTitle>Bloqueio de Horários</CardTitle>
+                <CardDescription>
+                  Gerencie horários bloqueados para médicos específicos ou para a clínica.
+                </CardDescription>
+              </div>
+              
+              {/* Header Filters for Block List */}
+              <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-2 rounded-lg border border-border/50">
+                <Select value={blockFilterMedicoId} onValueChange={setBlockFilterMedicoId}>
+                  <SelectTrigger className="w-[180px] h-9 bg-background shadow-sm">
+                    <SelectValue placeholder="Médico" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Médicos</SelectItem>
+                    {veterinarios.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Input 
+                  type="month"
+                  value={blockFilterMonth}
+                  onChange={(e) => setBlockFilterMonth(e.target.value)}
+                  className="w-[140px] h-9 bg-background shadow-sm"
+                  title="Período do Relatório"
+                />
+
+                <Button 
+                  size="sm"
+                  className="h-9 whitespace-nowrap bg-primary/90 hover:bg-primary"
+                  onClick={() => handleOpenBlockList(blockFilterMedicoId, blockFilterMonth)}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Ver Lista
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleBlockSubmit} className="space-y-4 pt-2 border-t border-border/50">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">Médico Veterinário (Opcional):</span>
+                    <Select value={blockMedicoId} onValueChange={setBlockMedicoId}>
+                      <SelectTrigger className="shadow-sm">
+                        <SelectValue placeholder="Selecione o Médico (ou deixe 'Todos' para clínica geral)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Médicos (Bloqueio Geral)</SelectItem>
+                        {veterinarios.map(v => (
+                          <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">Local (Opcional):</span>
+                    <Input 
+                      placeholder="Ex: Consultório 1, Sala de Cirurgia..."
+                      value={blockLocal}
+                      onChange={(e) => setBlockLocal(e.target.value)}
+                      className="shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">Tipo de Bloqueio:*</span>
+                    <Select value={blockTipo} onValueChange={(val: any) => setBlockTipo(val)}>
+                      <SelectTrigger className="shadow-sm">
+                        <SelectValue placeholder="Selecione o Tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hora">Dia e Horário Específico</SelectItem>
+                        <SelectItem value="dia">Dia Todo</SelectItem>
+                        <SelectItem value="manha">Turno da Manhã</SelectItem>
+                        <SelectItem value="tarde">Turno da Tarde</SelectItem>
+                        <SelectItem value="semana">Semana</SelectItem>
+                        <SelectItem value="mes">Mês</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Data Inicial */}
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">
+                      {(blockTipo === 'semana' || blockTipo === 'mes') ? 'Data de Início:*' : 'Data do Bloqueio:*'}
+                    </span>
+                    <Input 
+                      type="date" 
+                      value={blockDate}
+                      onChange={(e) => setBlockDate(e.target.value)}
+                      required
+                      className="shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Campos condicionais baseados no tipo de bloqueio */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(blockTipo === 'semana' || blockTipo === 'mes' || blockTipo === 'dia') && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Data de Término:*</span>
+                      <Input 
+                        type="date" 
+                        value={blockDateFim}
+                        onChange={(e) => setBlockDateFim(e.target.value)}
+                        required
+                        className="shadow-sm"
+                      />
+                    </div>
+                  )}
+
+                  {blockTipo === 'hora' && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Horário Início e Término:*</span>
+                      <div className="flex gap-2">
+                        <Input 
+                          type="time" 
+                          value={blockHoraInicio}
+                          onChange={(e) => setBlockHoraInicio(e.target.value)}
+                          required
+                          className="shadow-sm"
+                        />
+                        <Input 
+                          type="time" 
+                          value={blockHoraFim}
+                          onChange={(e) => setBlockHoraFim(e.target.value)}
+                          required
+                          className="shadow-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex justify-end gap-2 pt-6">
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={() => {
+                      setBlockMedicoId('all');
+                      setBlockTipo('hora');
+                      setBlockLocal('');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="bg-destructive hover:bg-destructive/90 gap-2">
+                    <X className="w-4 h-4" />
+                    Registrar Bloqueio
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1062,11 +1461,67 @@ export default function AgendaPage() {
                   Insira o médico, a data e valide as informações de contato do paciente.
                 </CardDescription>
               </CardHeader>
-              <form onSubmit={handleScheduleSubmit}>
+              <div className="space-y-4">
                 <CardContent className="space-y-4">
                   
+                  <div className="space-y-4 pb-4 border-b">
+                    <h3 className="font-semibold text-foreground/80">Dados Cadastrais do Tutor e Pet</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">CPF do Tutor:*</span>
+                        <Input 
+                          placeholder="Digite apenas números (11 dígitos)" 
+                          value={formTutorCpf}
+                          onChange={(e) => setFormTutorCpf(e.target.value.replace(/\D/g, '').substring(0, 11))}
+                          disabled={!!foundPet}
+                          className="shadow-sm"
+                          autoComplete="new-password"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">Nome do Pet:*</span>
+                        <Input 
+                          placeholder="Nome do animal" 
+                          value={formPetNome}
+                          onChange={(e) => setFormPetNome(e.target.value)}
+                          disabled={!!foundPet}
+                          className="shadow-sm"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">Nome do Tutor:*</span>
+                        <Input 
+                          placeholder="Nome completo do tutor" 
+                          value={formTutorNome}
+                          onChange={(e) => setFormTutorNome(e.target.value)}
+                          disabled={!!foundPet}
+                          className="shadow-sm"
+                          autoComplete="new-password"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">Telefone de Contato:</span>
+                        <Input 
+                          placeholder="(00) 00000-0000" 
+                          value={formTutorTelefone}
+                          onChange={(e) => setFormTutorTelefone(e.target.value)}
+                          disabled={!!foundPet}
+                          className="shadow-sm"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
                   {/* Seletor de Médico, Tipo, Data e Hora */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
                     <div className="space-y-2">
                       <span className="text-sm font-medium">Médico Veterinário:*</span>
                       <Select value={formMedicoId} onValueChange={setFormMedicoId}>
@@ -1085,7 +1540,7 @@ export default function AgendaPage() {
                       <span className="text-sm font-medium">Tipo:*</span>
                       <Select value={formTipo} onValueChange={(val: any) => setFormTipo(val)}>
                         <SelectTrigger className="shadow-sm">
-                          <SelectValue placeholder="Tipo de Agendamento" />
+                          <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Consulta">Consulta</SelectItem>
@@ -1094,6 +1549,16 @@ export default function AgendaPage() {
                           <SelectItem value="Cirurgia">Cirurgia</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Local (Opcional):</span>
+                      <Input 
+                        placeholder="Ex: Sala 1" 
+                        value={formLocal}
+                        onChange={(e) => setFormLocal(e.target.value)}
+                        className="shadow-sm"
+                      />
                     </div>
 
                     {/* Data e Hora */}
@@ -1119,58 +1584,6 @@ export default function AgendaPage() {
                     </div>
                   </div>
 
-                  <div className="border-t pt-4 space-y-4">
-                    <h3 className="font-semibold text-foreground/80">Dados Cadastrais do Tutor e Pet</h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <span className="text-sm font-medium">CPF do Tutor:*</span>
-                        <Input 
-                          placeholder="Digite apenas números (11 dígitos)" 
-                          value={formTutorCpf}
-                          onChange={(e) => setFormTutorCpf(e.target.value.replace(/\D/g, '').substring(0, 11))}
-                          disabled={!!foundPet}
-                          className="shadow-sm"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <span className="text-sm font-medium">Nome do Tutor:*</span>
-                        <Input 
-                          placeholder="Nome completo do tutor" 
-                          value={formTutorNome}
-                          onChange={(e) => setFormTutorNome(e.target.value)}
-                          disabled={!!foundPet}
-                          className="shadow-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <span className="text-sm font-medium">Nome do Pet:*</span>
-                        <Input 
-                          placeholder="Nome do animal" 
-                          value={formPetNome}
-                          onChange={(e) => setFormPetNome(e.target.value)}
-                          disabled={!!foundPet}
-                          className="shadow-sm"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <span className="text-sm font-medium">Telefone de Contato:</span>
-                        <Input 
-                          placeholder="(00) 00000-0000" 
-                          value={formTutorTelefone}
-                          onChange={(e) => setFormTutorTelefone(e.target.value)}
-                          disabled={!!foundPet}
-                          className="shadow-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
                 </CardContent>
                 <CardFooter className="border-t pt-4 flex gap-3 justify-end">
                   <Button 
@@ -1183,11 +1596,11 @@ export default function AgendaPage() {
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" className="bg-primary hover:bg-primary/90">
+                  <Button type="button" onClick={handleScheduleSubmit} className="bg-primary hover:bg-primary/90">
                     Confirmar Agendamento
                   </Button>
                 </CardFooter>
-              </form>
+              </div>
             </Card>
 
           </div>
@@ -1456,7 +1869,7 @@ export default function AgendaPage() {
 
           <form onSubmit={handleEditSubmit} className="space-y-4 py-2">
             {/* Seletor de Médico, Tipo, Data e Hora */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <span className="text-sm font-medium text-muted-foreground">Médico Veterinário:*</span>
                 <Select value={editMedicoId} onValueChange={setEditMedicoId}>
@@ -1475,15 +1888,26 @@ export default function AgendaPage() {
                 <span className="text-sm font-medium text-muted-foreground">Tipo:*</span>
                 <Select value={editTipo} onValueChange={(val: any) => setEditTipo(val)}>
                   <SelectTrigger className="shadow-sm">
-                    <SelectValue placeholder="Tipo de Agendamento" />
+                    <SelectValue placeholder="Tipo" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Consulta">Consulta</SelectItem>
                     <SelectItem value="Retorno">Retorno</SelectItem>
                     <SelectItem value="Exame">Exame</SelectItem>
                     <SelectItem value="Cirurgia">Cirurgia</SelectItem>
+                    <SelectItem value="Bloqueado" className="text-muted-foreground">Bloqueio de Agenda</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-muted-foreground">Local:</span>
+                <Input 
+                  placeholder="Ex: Sala 1" 
+                  value={editLocal}
+                  onChange={(e) => setEditLocal(e.target.value)}
+                  className="shadow-sm"
+                />
               </div>
 
               {/* Data e Hora */}
@@ -1588,6 +2012,104 @@ export default function AgendaPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: Lista de Bloqueios */}
+      <Dialog open={isBlockListModalOpen} onOpenChange={setIsBlockListModalOpen}>
+        <DialogContent className="max-w-2xl bg-white/95 backdrop-blur-sm border-primary/20 shadow-xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-primary">
+              <CalendarDays className="w-5 h-5" />
+              Bloqueios Ativos
+            </DialogTitle>
+            <DialogDescription>
+              Abaixo estão os bloqueios ativos para este médico e a clínica.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {isBlockListLoading ? (
+              <div className="flex justify-center py-8">
+                <span className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></span>
+              </div>
+            ) : blockListData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/20">
+                Nenhum bloqueio ativo encontrado.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Médico</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Período / Hora</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {blockListData.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium">
+                        {b.medico ? b.medico.nome : <span className="text-amber-600">Geral (Todos)</span>}
+                      </TableCell>
+                      <TableCell className="capitalize">{b.tipo_bloqueio}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex flex-col gap-1">
+                          <span>{format(parseISO(b.data_inicio), 'dd/MM/yyyy')} {b.data_inicio !== b.data_fim && `até ${format(parseISO(b.data_fim), 'dd/MM/yyyy')}`}</span>
+                          {b.hora_inicio && (
+                            <span className="text-muted-foreground text-xs">{b.hora_inicio.substring(0, 5)} às {b.hora_fim.substring(0, 5)}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="text-amber-600 hover:text-amber-700 h-8 px-2"
+                          onClick={() => {
+                            // Preencher form
+                            setBlockMedicoId(b.medico_id || 'all');
+                            setBlockTipo(b.tipo_bloqueio);
+                            setBlockDate(b.data_inicio);
+                            setBlockDateFim(b.data_fim);
+                            if (b.hora_inicio) setBlockHoraInicio(b.hora_inicio);
+                            if (b.hora_fim) setBlockHoraFim(b.hora_fim);
+                            setBlockLocal(b.local || '');
+                            setIsBlockListModalOpen(false);
+                            setActiveTab('bloquear');
+                            toast({ title: "Modo Edição", description: "O formulário foi preenchido. Apague o bloqueio atual se desejar substituí-lo." });
+                          }}
+                          title="Carregar no Formulário"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="text-red-500 hover:text-red-700 h-8 px-2"
+                          onClick={() => handleDeleteBlock(b.id)}
+                          title="Apagar Bloqueio"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4 flex justify-between sm:justify-between items-center w-full">
+            <Button variant="outline" className="gap-2" onClick={handlePrintBlocks}>
+              <Printer className="w-4 h-4" />
+              Imprimir PDF
+            </Button>
+            <Button variant="outline" onClick={() => setIsBlockListModalOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

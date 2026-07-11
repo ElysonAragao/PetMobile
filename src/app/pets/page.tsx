@@ -743,6 +743,7 @@ function PetForm({
 function PetList({ pets, isLoaded, onEdit, onDelete, searchId }: { pets: Pet[], isLoaded: boolean, onEdit: (pet: Pet) => void, onDelete: (id: string) => void, searchId?: string | null }) {
   const router = useRouter();
   const [sortConfig, setSortConfig] = React.useState<{key: keyof Pet, direction: 'asc' | 'desc'} | null>(null);
+  const [globalSearch, setGlobalSearch] = React.useState('');
   const [selectedPlanFilter, setSelectedPlanFilter] = React.useState('all');
   const [selectedEspecieFilter, setSelectedEspecieFilter] = React.useState('all');
   const [petToPrint, setPetToPrint] = React.useState<Pet | null>(null);
@@ -758,6 +759,22 @@ function PetList({ pets, isLoaded, onEdit, onDelete, searchId }: { pets: Pet[], 
       
       const esp = p.especie || 'Outro';
       if (selectedEspecieFilter !== 'all' && esp !== selectedEspecieFilter) return false;
+      
+      if (globalSearch) {
+        const searchLower = globalSearch.toLowerCase();
+        // Remove formatting from CPF for easier searching if user types numbers only
+        const cleanCpf = (p.tutorCpf || '').replace(/\D/g, '');
+        const cleanSearch = searchLower.replace(/\D/g, '');
+        
+        const searchMatch = 
+          (p.nome || '').toLowerCase().includes(searchLower) ||
+          (cleanSearch && cleanCpf.includes(cleanSearch)) ||
+          (p.tutorCpf || '').includes(searchLower) ||
+          (p.codPet || '').toLowerCase().includes(searchLower) ||
+          (p.tutorNome || '').toLowerCase().includes(searchLower);
+          
+        if (!searchMatch) return false;
+      }
       
       return true;
     });
@@ -811,30 +828,42 @@ function PetList({ pets, isLoaded, onEdit, onDelete, searchId }: { pets: Pet[], 
             )}
           </CardDescription>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={selectedPlanFilter} onValueChange={setSelectedPlanFilter}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Todos os Planos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os Planos</SelectItem>
-              {uniquePlanos.map(plano => (
-                <SelectItem key={plano} value={plano}>{plano}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto mt-4 xl:mt-0">
+          <div className="relative w-full xl:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Buscar por CPF, Código ou Nome..." 
+              className="pl-9 h-10 w-full bg-slate-50 border-slate-200 focus-visible:ring-slate-300 rounded-md" 
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex gap-2 w-full xl:w-auto">
+            <Select value={selectedPlanFilter} onValueChange={setSelectedPlanFilter}>
+              <SelectTrigger className="w-full xl:w-[150px] h-10">
+                <SelectValue placeholder="Plano" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Planos</SelectItem>
+                {uniquePlanos.map(plano => (
+                  <SelectItem key={plano} value={plano}>{plano}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={selectedEspecieFilter} onValueChange={setSelectedEspecieFilter}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Todas Espécies" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas Espécies</SelectItem>
-              {uniqueEspecies.map(esp => (
-                <SelectItem key={esp} value={esp}>{esp}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select value={selectedEspecieFilter} onValueChange={setSelectedEspecieFilter}>
+              <SelectTrigger className="w-full xl:w-[150px] h-10">
+                <SelectValue placeholder="Espécie" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas Espécies</SelectItem>
+                {uniqueEspecies.map(esp => (
+                  <SelectItem key={esp} value={esp}>{esp}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="flex items-center gap-2 border-l pl-2 ml-1">
             <Button 
@@ -927,73 +956,69 @@ function PetList({ pets, isLoaded, onEdit, onDelete, searchId }: { pets: Pet[], 
       </CardHeader>
       <CardContent>
         {sortedPets.length > 0 ? (
-          <Table>
+          <div className="overflow-x-auto">
+          <Table className="min-w-max text-[11px] lg:text-xs">
             <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('codPet')} className="hover:bg-transparent p-0 font-bold">
-                    Código
-                    {getSortIndicator('codPet')}
+              <TableRow className="border-b-2">
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">
+                  <Button variant="ghost" onClick={() => requestSort('codPet')} className="hover:bg-transparent p-0 h-auto font-semibold">
+                    Código {getSortIndicator('codPet')}
                   </Button>
                 </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('nome')} className="hover:bg-transparent p-0 font-bold">
-                    Nome
-                    {getSortIndicator('nome')}
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">
+                  <Button variant="ghost" onClick={() => requestSort('nome')} className="hover:bg-transparent p-0 h-auto font-semibold">
+                    Nome {getSortIndicator('nome')}
                   </Button>
                 </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('especie')} className="hover:bg-transparent p-0 font-bold">
-                    Espécie/Raça
-                    {getSortIndicator('especie')}
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">
+                  <Button variant="ghost" onClick={() => requestSort('tutorCpf')} className="hover:bg-transparent p-0 h-auto font-semibold">
+                    CPF Tutor {getSortIndicator('tutorCpf')}
                   </Button>
                 </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('tutorNome')} className="hover:bg-transparent p-0 font-bold">
-                    Tutor
-                    {getSortIndicator('tutorNome')}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('tutorCpf')} className="hover:bg-transparent p-0 font-bold">
-                    CPF Tutor
-                    {getSortIndicator('tutorCpf')}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button variant="ghost" onClick={() => requestSort('healthPlanName')} className="hover:bg-transparent p-0 font-bold">
-                    Plano
-                    {getSortIndicator('healthPlanName')}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Data de Nasc.</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Idade</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Espécie/Sexo</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Telefone</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap max-w-[120px] truncate">E-mail</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap max-w-[150px] truncate">Endereço</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Plano de Saúde</TableHead>
+                <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Mat</TableHead>
+                <TableHead className="text-right font-semibold text-slate-600">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedPets.map((pet) => (
-                <TableRow key={pet.id}>
-                  <TableCell>{pet.codPet}</TableCell>
-                  <TableCell className="font-medium">{pet.nome}</TableCell>
-                  <TableCell>{pet.especie}{pet.raca ? ` / ${pet.raca}` : ''}</TableCell>
-                  <TableCell>{pet.tutorNome}</TableCell>
-                  <TableCell>{pet.tutorCpf}</TableCell>
-                  <TableCell>{pet.healthPlanName}</TableCell>
+                <TableRow key={pet.id} className="hover:bg-slate-50/50">
+                  <TableCell className="font-medium">{pet.codPet}</TableCell>
+                  <TableCell className="font-medium min-w-[120px]">{pet.nome}<br/><span className="text-[10px] text-muted-foreground font-normal">Tutor: {pet.tutorNome}</span></TableCell>
+                  <TableCell className="whitespace-nowrap">{pet.tutorCpf || '-'}</TableCell>
+                  <TableCell>{pet.dataNascimento ? new Date(pet.dataNascimento).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                  <TableCell>{pet.idade || '-'}</TableCell>
+                  <TableCell>{pet.especie}{pet.sexo ? ` (${pet.sexo})` : ''}</TableCell>
+                  <TableCell className="whitespace-nowrap">{pet.tutorTelefone || '-'}</TableCell>
+                  <TableCell className="max-w-[120px] truncate" title={pet.tutorEmail}>{pet.tutorEmail || '-'}</TableCell>
+                  <TableCell className="max-w-[150px] truncate" title={pet.tutorEndereco ? `${pet.tutorEndereco}, ${pet.tutorCidade}-${pet.tutorUf}` : ''}>
+                    {pet.tutorEndereco ? `${pet.tutorEndereco}, ${pet.tutorCidade}` : '-'}
+                  </TableCell>
+                  <TableCell>{pet.healthPlanName || '-'}</TableCell>
+                  <TableCell>{pet.matricula || '-'}</TableCell>
                   <TableCell className="text-right flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" title="Imprimir Crachá/Etiqueta" onClick={() => setPetToPrint(pet)}>
-                      <Printer className="h-4 w-4 text-blue-500" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Imprimir Crachá/Etiqueta" onClick={() => setPetToPrint(pet)}>
+                      <Printer className="h-3.5 w-3.5 text-blue-500" />
                     </Button>
                     <Link href={`/pets/${pet.id}/prontuario`} passHref>
-                      <Button variant="ghost" size="icon" title="Prontuário Digital">
-                        <FileText className="h-4 w-4 text-primary" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Prontuário Digital">
+                        <FileText className="h-3.5 w-3.5 text-primary" />
                       </Button>
                     </Link>
-                    <Button variant="ghost" size="icon" onClick={() => onEdit(pet)}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => onDelete(pet.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(pet)}><Edit className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(pet.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         ) : (
           <div className="text-center py-12">
             <PawPrint className="mx-auto h-12 w-12 text-muted-foreground" />

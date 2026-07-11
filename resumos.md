@@ -1,5 +1,23 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-07-11] - Prontuário, Agenda e Workflow de Exames/Orçamentos
+
+### 🏥 Prontuário Digital e Operacionalidade Clínica
+- **Finalização de Atendimento e Solicitação de Exames**: Inclusão de botões estratégicos no rodapé do prontuário ("Finalizar Atendimento" e "Salvar e Solicitar Exames") que espelham o workflow do PacienteMobile.
+- **Integração Prontuário-Movimentação**: Criada "passagem expressa" onde a solicitação de exames originada do Prontuário pula o menu da Central de Atendimento e vai direto para a tela de geração da guia, carregando o ID do pet e o contexto `from=prontuario`.
+- **Botão Voltar Inteligente**: Ao entrar na guia de exames via prontuário, o botão "Voltar" leva o médico de volta para o prontuário do paciente que estava sendo atendido, e não para o menu inicial.
+
+### 📄 Documentos, Recibos e Orçamentos
+- **Extenso Monetário Inteligente**: Inclusão de função para gerar Recibos Médicos convertendo valores diretamente para texto (ex: R$ 350,00 -> trezentos e cinquenta reais).
+- **Padronização de Orçamento (UI/PDF)**: Refatoração completa da tela de Novo Orçamento para ficar visual e funcionalmente idêntica à do PacienteMobile. Alteração para layout "Exame/Serviço vs Material", inclusão de CPF e Email. O PDF impresso foi atualizado para refletir estes campos.
+- **Assinatura Global em Documentos**: Padronização da impressão de recibos e documentos clínicos, com assinaturas centralizadas.
+
+### 📅 Agenda e Bloqueios
+- **Bloqueio de Agenda**: Aprimoramento da tela de agenda bloqueando autocomplete de campos sensíveis para melhorar a UX, além da paridade na exibição de dados.
+
+### 📊 Painel Master (Auditoria)
+- **Auditoria de Recursos**: Implementação de nova aba de Auditoria Master para acompanhar os limites de storage e database do Supabase por empresa.
+
 ## [2026-06-15] - Workflow Rápido e Resiliência Dinâmica de Câmeras
 
 ### 📸 Estabilização e Auto-Recuperação de Câmeras (Mobile/UX)

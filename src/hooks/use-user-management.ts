@@ -13,6 +13,7 @@ const baseUserFormSchema = z.object({
     status: z.enum(['Administrador', 'Administrador Auxiliar', 'MedicoVet', 'MedicoVet Geral', 'Secretária', 'Secretária Geral', 'Leitor', 'Leitor Geral', 'Relatórios'], { required_error: "Status é obrigatório" }),
     dataValidade: z.date().optional(),
     telefone: z.string().optional().default(''),
+    medicosVinculados: z.array(z.string()).optional().default([]),
 });
 
 const refineValidade = (data: { status: string; dataValidade?: Date }, ctx: z.RefinementCtx) => {
@@ -47,7 +48,7 @@ export function useUsers() {
             // mas logica coerente é trazer os usuários da empresa selecionada.
             let query = supabase
                 .from('pet_usuarios')
-                .select('id, empresaId:empresa_id, numUsuario:codigo, nome, cpf, crmvUf:crmv_uf, email, telefone, status, dataValidade:validade, dataCadastro:created_at')
+                .select('id, empresaId:empresa_id, numUsuario:codigo, nome, cpf, crmvUf:crmv_uf, email, telefone, status, dataValidade:validade, dataCadastro:created_at, vinculos:secretaria_veterinario!secretaria_veterinario_secretaria_id_fkey(veterinario_id)')
                 .order('nome');
 
             if (selectedEmpresaId) {
@@ -89,6 +90,7 @@ export function useUsers() {
                     validade: userData.status === 'Administrador' ? null : (userData.dataValidade ? format(userData.dataValidade, 'yyyy-MM-dd') : null),
                     empresaId: selectedEmpresaId,
                     telefone: userData.telefone || null,
+                    medicosVinculados: userData.medicosVinculados || [],
                     // Se for Master, manda o selectedEmpresaId que o backend usará; 
                     // Se for Adm/AdmAux, o selectedEmpresaId já será o mesmo ID real do criador e o backend validará.
                 })
@@ -127,6 +129,8 @@ export function useUsers() {
                         status: userData.status,
                         validade: userData.status === 'Administrador' ? null : (userData.dataValidade ? format(userData.dataValidade, 'yyyy-MM-dd') : null),
                         telefone: userData.telefone || null,
+                        medicosVinculados: userData.medicosVinculados || [],
+                        empresa_id: selectedEmpresaId,
                     }
                 })
             });

@@ -90,6 +90,16 @@ export interface QrData {
   data: string;
 }
 
+export type UserRole = 
+  | 'Master' 
+  | 'Administrador' 
+  | 'Administrador Auxiliar'
+  | 'Veterinário' 
+  | 'Secretária' 
+  | 'Secretária Geral'
+  | 'Leitor' 
+  | 'Relatórios';
+
 export interface Usuario {
   id: string;
   empresaId?: string; // NULL para Master
@@ -99,7 +109,7 @@ export interface Usuario {
   crmvUf?: string;
   email: string;
   telefone?: string;
-  status: 'Master' | 'Administrador' | 'Administrador Auxiliar' | 'Secretária' | 'Secretária Geral' | 'MedicoVet' | 'MedicoVet Geral' | 'Leitor' | 'Leitor Geral' | 'Relatórios';
+  status: UserRole;
   dataCadastro: string; // ISO string
   dataValidade: string; // YYYY-MM-DD
   validade?: string; // from api
@@ -177,12 +187,15 @@ export interface AgendaItem {
   tutorNome: string;
   petNome: string;
   tutorTelefone: string | null;
-  status: 'Agendado' | 'Cancelado' | 'Realizado';
+  status: 'Agendado' | 'Cancelado' | 'Realizado' | 'Bloqueado';
   tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
+  local?: string | null;
   createdAt: string;
+  createdBy?: string | null;
   // Join objects
   medico?: { nome: string; crmv_uf?: string };
   pet?: { nome: string; codPet?: string };
+  criador?: { nome: string };
 }
 
 export interface Material {

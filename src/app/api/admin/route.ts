@@ -179,19 +179,30 @@ export async function POST(req: NextRequest) {
                 if (finalStatus !== 'Administrador') {
                     return NextResponse.json({ error: 'O Master pode cadastrar apenas o perfil Administrador.' }, { status: 403 });
                 }
+            } else if (caller.role === 'Administrador') {
+                // Administrador não pode criar outro Administrador
+                if (finalStatus === 'Administrador') {
+                    return NextResponse.json({ error: 'Apenas o Master pode criar outro Administrador.' }, { status: 403 });
+                }
             } else if (caller.role === 'Administrador Auxiliar') {
                 // Adm Auxiliar não pode criar Administrador nem Adm Auxiliar
                 if (finalStatus === 'Administrador' || finalStatus === 'Administrador Auxiliar') {
                     return NextResponse.json({ error: 'Você não tem permissão para criar administradores.' }, { status: 403 });
                 }
             }
-            // Administrador 'puro' pode criar qualquer perfil (exceto Master, que já não está no body)
 
-            if (!caller.isMaster && validade && caller.validade) {
-                const novaValidadeDate = new Date(validade);
+            // TRAVA DE VALIDADE: Se o criador tem uma validade limite, ele não pode dar validade infinita ou maior.
+            let finalValidade = validade;
+            if (!caller.isMaster && caller.validade) {
                 const callerValidadeDate = new Date(caller.validade);
-                if (novaValidadeDate > callerValidadeDate) {
-                    return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
+                if (!validade) {
+                    // Se tentar criar sem validade (infinito), força a validade do criador
+                    finalValidade = caller.validade;
+                } else {
+                    const novaValidadeDate = new Date(validade);
+                    if (novaValidadeDate > callerValidadeDate) {
+                        return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
+                    }
                 }
             }
 
@@ -214,7 +225,7 @@ export async function POST(req: NextRequest) {
                     email,
                     status: finalStatus,
                     empresa_id: finalStatus === 'Master' ? null : target_empresa_id,
-                    validade: validade || null,
+                    validade: finalValidade || null,
                     cpf: cpf || null,
                     crmv_uf: finalCrmv || null,
                     telefone: telefone || null,
@@ -229,6 +240,19 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: `Erro ao criar perfil: ${profileError.message}` }, { status: 500 });
             }
 
+            // 3. Vincular médicos se for Secretária
+            if (finalStatus === 'Secretária' || finalStatus === 'Secretária Geral') {
+                const { medicosVinculados } = body;
+                if (medicosVinculados && Array.isArray(medicosVinculados) && medicosVinculados.length > 0) {
+                    const vinculacoes = medicosVinculados.map((vetId: string) => ({
+                        secretaria_id: authData.user.id,
+                        veterinario_id: vetId,
+                        empresa_id: target_empresa_id
+                    }));
+                    await adminClient.from('secretaria_veterinario').insert(vinculacoes);
+                }
+            }
+
             return NextResponse.json({ success: true, userId: authData.user.id });
         }
 
@@ -240,15 +264,17 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'ID do usuário é obrigatório.' }, { status: 400 });
             }
 
-            const target_empresa_id = caller.isMaster ? userData.empresa_id : caller.empresaId;
+            let target_empresa_id = caller.empresaId;
+            let targetUser = null;
 
-            if (userData.status !== 'Master' && !target_empresa_id) {
-                return NextResponse.json({ error: 'Empresa é obrigatória para usuários não-Master.' }, { status: 400 });
-            }
+            // Para update, sempre pegamos os dados reais do banco para garantir segurança e consistência
+            const { data: fetchedUser } = await adminClient.from('pet_usuarios').select('empresa_id, status').eq('id', userId).single();
+            targetUser = fetchedUser;
 
-            // Validar permissão para alteração
-            if (!caller.isMaster) {
-                const { data: targetUser } = await adminClient.from('pet_usuarios').select('empresa_id, status').eq('id', userId).single();
+            if (caller.isMaster) {
+                // Master usa a empresa atual do usuário sendo editado, se não vier no payload
+                target_empresa_id = userData.empresa_id || targetUser?.empresa_id;
+            } else {
                 if (!targetUser || targetUser.empresa_id !== caller.empresaId) {
                     return NextResponse.json({ error: 'Acesso negado ao usuário.' }, { status: 403 });
                 }
@@ -260,19 +286,30 @@ export async function POST(req: NextRequest) {
                     if (userData.status === 'Administrador' || userData.status === 'Administrador Auxiliar') {
                         return NextResponse.json({ error: 'Você não pode promover para administrador.' }, { status: 403 });
                     }
+                } else if (caller.role === 'Administrador') {
+                    // Administrador não pode transformar alguém em Administrador
+                    if (userData.status === 'Administrador' && targetUser.status !== 'Administrador') {
+                         return NextResponse.json({ error: 'Apenas o Master pode promover usuários a Administrador.' }, { status: 403 });
+                    }
                 }
 
-                if (userData.validade && caller.validade) {
-                    const novaValidadeDate = new Date(userData.validade);
+                // TRAVA DE VALIDADE NA ATUALIZAÇÃO
+                if (caller.validade) {
                     const callerValidadeDate = new Date(caller.validade);
-                    if (novaValidadeDate > callerValidadeDate) {
-                        return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
+                    if (!userData.validade) {
+                        userData.validade = caller.validade; // Força limite máximo se tentar colocar infinito
+                    } else {
+                        const novaValidadeDate = new Date(userData.validade);
+                        if (novaValidadeDate > callerValidadeDate) {
+                            return NextResponse.json({ error: 'A data de validade não pode exceder a sua própria validade.' }, { status: 403 });
+                        }
                     }
                 }
             }
 
-            // Remove email para evitar problemas de atualização de credenciais - editado via outro fluxo se necessário
-            const { email, id, ...updatePayload } = userData;
+            // Remove campos que não pertencem à tabela pet_usuarios
+            const { email, id, medicosVinculados, ...updatePayload } = userData;
+            
             updatePayload.empresa_id = userData.status === 'Master' ? null : target_empresa_id;
 
             const { error: profileError } = await adminClient
@@ -282,6 +319,27 @@ export async function POST(req: NextRequest) {
 
             if (profileError) {
                 return NextResponse.json({ error: `Erro ao atualizar perfil: ${profileError.message}` }, { status: 500 });
+            }
+
+            // 3. Atualizar vínculos se for Secretária
+            if (userData.status === 'Secretária' || userData.status === 'Secretária Geral') {
+                if (medicosVinculados !== undefined && Array.isArray(medicosVinculados)) {
+                    // Remove os vínculos antigos
+                    await adminClient.from('secretaria_veterinario').delete().eq('secretaria_id', userId);
+                    // Insere os novos
+                    if (medicosVinculados.length > 0) {
+                        const vinculacoes = medicosVinculados.map((vetId: string) => ({
+                            secretaria_id: userId,
+                            veterinario_id: vetId,
+                            empresa_id: target_empresa_id
+                        }));
+                        const { error: vincError } = await adminClient.from('secretaria_veterinario').insert(vinculacoes);
+                        if (vincError) {
+                            console.error("Erro ao vincular médicos:", vincError);
+                            return NextResponse.json({ error: `Erro ao vincular médicos: ${vincError.message}` }, { status: 500 });
+                        }
+                    }
+                }
             }
 
             return NextResponse.json({ success: true });
@@ -352,6 +410,94 @@ export async function POST(req: NextRequest) {
             if (movimentacoesError) return NextResponse.json({ error: `Erro ao limpar movimentações: ${movimentacoesError.message}` }, { status: 500 });
 
             return NextResponse.json({ success: true, message: 'Toda a movimentação, leituras e faturamento da empresa foram zerados.' });
+        }
+
+        // ─── ZERAR LEITURAS ───
+        if (action === 'reset_leituras') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode zerar leituras.' }, { status: 403 });
+            const { empresaId } = body;
+            if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
+
+            const { error: leiturasError } = await adminClient
+                .from('pet_leituras')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (leiturasError) return NextResponse.json({ error: `Erro ao limpar leituras: ${leiturasError.message}` }, { status: 500 });
+            return NextResponse.json({ success: true, message: 'Leituras da empresa foram zeradas.' });
+        }
+
+        // ─── ZERAR EXAMES ───
+        if (action === 'reset_exames') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode zerar exames.' }, { status: 403 });
+            const { empresaId } = body;
+            if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
+
+            const { error: examesError } = await adminClient
+                .from('pet_exames')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (examesError) return NextResponse.json({ error: `Erro ao limpar exames: ${examesError.message}` }, { status: 500 });
+            return NextResponse.json({ success: true, message: 'Exames da empresa foram zerados.' });
+        }
+
+        // ─── ZERAR ORÇAMENTOS ───
+        if (action === 'reset_orcamentos') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode zerar orçamentos.' }, { status: 403 });
+            const { empresaId } = body;
+            if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
+
+            const { error: orcamentosError } = await adminClient
+                .from('pet_orcamentos')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (orcamentosError) return NextResponse.json({ error: `Erro ao limpar orçamentos: ${orcamentosError.message}` }, { status: 500 });
+            return NextResponse.json({ success: true, message: 'Orçamentos da empresa foram zerados.' });
+        }
+
+        // ─── IMPORTAR EXAMES (TUSS/ANS) ───
+        if (action === 'import_exams') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode importar exames.' }, { status: 403 });
+            const { empresaId, data } = body;
+            
+            if (!empresaId || !data || !Array.isArray(data)) {
+                return NextResponse.json({ error: 'Dados inválidos para importação.' }, { status: 400 });
+            }
+
+            const examesToInsert = data.map((row: any) => ({
+                empresa_id: empresaId,
+                codigo: row['Código'] || row['codigo'] || row['Termo'] || row['termo'] || null,
+                nome: row['Nome'] || row['nome'] || row['Descrição'] || row['descricao'] || 'Exame Sem Nome',
+                tipo: 'Exame',
+                valor_base: 0
+            })).filter(exame => exame.nome && exame.nome !== 'Exame Sem Nome');
+
+            if (examesToInsert.length === 0) {
+                 return NextResponse.json({ error: 'Nenhum registro válido encontrado para importação.' }, { status: 400 });
+            }
+
+            const { error: importError } = await adminClient
+                .from('pet_exames')
+                .insert(examesToInsert);
+
+            if (importError) return NextResponse.json({ error: `Erro na importação: ${importError.message}` }, { status: 500 });
+
+            return NextResponse.json({ success: true, count: examesToInsert.length });
+        }
+
+        // ─── AUDITORIA DE BANCO DE DADOS E STORAGE ───
+        if (action === 'get_audit_metrics') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode visualizar auditoria.' }, { status: 403 });
+            
+            const { data, error } = await adminClient.rpc('get_audit_metrics');
+            if (error) {
+                console.error("Erro no RPC get_audit_metrics:", error.message);
+                return NextResponse.json({ error: `Função SQL get_audit_metrics não encontrada ou falhou: ${error.message}. Você já criou a função no Supabase?` }, { status: 500 });
+            }
+            
+            return NextResponse.json({ success: true, metrics: data });
         }
 
         return NextResponse.json({ error: 'Ação não reconhecida.' }, { status: 400 });

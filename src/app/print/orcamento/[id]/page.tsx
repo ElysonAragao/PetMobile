@@ -115,14 +115,15 @@ function PrintOrcamentoContent() {
 
             <section className="mb-4 text-[10.5pt] border-y border-black py-1 px-0 space-y-1">
                 <div className="space-y-0.5">
-                    <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Dados do Cliente</div>
+                    <div className="text-[9pt] font-bold text-gray-500 uppercase tracking-wider">Paciente/Cliente</div>
                     <div className="grid grid-cols-12 gap-x-2">
                         <div className="col-span-5"><strong>NOME:</strong> {orcamento.cliente.nome}</div>
-                        <div className="col-span-3"><strong>TELEFONE:</strong> {orcamento.cliente.telefone || '-'}</div>
-                        <div className="col-span-4"><strong>COMPLEMENTO:</strong> {orcamento.cliente.cpl || '-'}</div>
+                        <div className="col-span-3"><strong>CPF:</strong> {orcamento.cliente.cpf || '-'}</div>
+                        <div className="col-span-4"><strong>TELEFONE:</strong> {orcamento.cliente.telefone || '-'}</div>
                     </div>
                     <div className="grid grid-cols-12 gap-x-2 border-b border-dotted border-gray-400 pb-0.5 mt-1">
-                        <div className="col-span-12"><strong>PLANO / CONVÊNIO:</strong> <span className="text-primary font-semibold">{orcamento.plano}</span></div>
+                        <div className="col-span-5"><strong>EMAIL:</strong> {orcamento.cliente.email || '-'}</div>
+                        <div className="col-span-7"><strong>PLANO / CONVÊNIO:</strong> <span className="text-primary font-semibold">{orcamento.plano}</span></div>
                     </div>
                 </div>
             </section>
