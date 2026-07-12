@@ -1361,8 +1361,42 @@ function AuditoriaTab() {
         );
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const projectRef = supabaseUrl.split("//")[1]?.split(".")[0];
+    
+    // Links baseados no projeto
+    const sqlUrl = projectRef 
+        ? `https://supabase.com/dashboard/project/${projectRef}/sql/new`
+        : "https://supabase.com/dashboard/projects";
+        
+    // O Supabase moveu o faturamento para o nível da Organização.
+    // Usar a página de configurações gerais (Settings) que pertence ao projeto 
+    // e já possui os atalhos corretos para o faturamento da organização dele.
+    const billingUrl = projectRef 
+        ? `https://supabase.com/dashboard/project/${projectRef}/settings/general`
+        : "https://supabase.com/dashboard/projects";
+
     return (
         <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 border border-slate-200 rounded-lg p-4 gap-4">
+                <div>
+                    <h3 className="font-semibold text-slate-800">Gerenciamento de Infraestrutura</h3>
+                    <p className="text-sm text-slate-500">Acesse o Supabase para gerenciar planos, faturamento e rodar scripts SQL avançados.</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                    <a href={sqlUrl} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+                            <Database className="w-4 h-4 mr-2" /> SQL Editor
+                        </Button>
+                    </a>
+                    <a href={billingUrl} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                            Faturamentos
+                        </Button>
+                    </a>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="border-blue-100 shadow-sm">
                     <CardHeader className="bg-blue-50/50 pb-3 rounded-t-xl border-b border-blue-100">

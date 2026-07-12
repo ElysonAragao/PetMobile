@@ -1,5 +1,19 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-07-12] - Correções de Auditoria e Integração com Painel Supabase
+
+### 📊 Correção de Métricas de Auditoria
+- **Correção de Cast (uuid = text)**: Resolvido o erro que impedia a aba de Auditoria de carregar no Painel Master. A função `get_audit_metrics` foi reescrita em SQL puro para evitar erros de compilação PL/pgSQL e foi corrigida a comparação de IDs de empresa (UUID) com os tokens de caminho do Storage (TEXT) através da conversão explícita `::text`.
+- **Prevenção de Erros de Markdown**: Substituição de `count(*)` por `count(1)` no script SQL para evitar que visualizadores Markdown mascarem os caracteres durante o "copiar e colar" para o Supabase.
+
+### 🔗 Integração Inteligente com Supabase (Acesso Rápido)
+- **Extração Dinâmica de Project Ref**: O painel agora extrai automaticamente o ID do projeto do Supabase (Project Reference) a partir das variáveis de ambiente (`NEXT_PUBLIC_SUPABASE_URL`).
+- **Botões Diretos de Infraestrutura**: Criada uma nova seção "Gerenciamento de Infraestrutura" na aba Auditoria com dois botões de acesso direto, evitando a navegação manual pelas organizações do Supabase:
+    - **SQL Editor**: Abre o Supabase diretamente na aba de Nova Consulta SQL para o banco de dados do projeto ativo.
+    - **Faturamentos**: Abre a aba de *Settings > General*, inserindo o Master exatamente no contexto do projeto atual para gerenciamento do plano sem confusões de roteamento.
+
+### 🛠️ Estabilização de Build e Cache
+- **Limpeza de ChunkLoadError**: Instruções e comandos para limpeza agressiva da pasta `.next` para resolver travamentos de compilação em ambiente de desenvolvimento (React/Next.js).
 ## [2026-07-11] - Prontuário, Agenda e Workflow de Exames/Orçamentos
 
 ### 🏥 Prontuário Digital e Operacionalidade Clínica
