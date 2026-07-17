@@ -1056,6 +1056,44 @@ function ManutencaoTab() {
                         </AlertDialog>
                     </CardContent>
                 </Card>
+
+                {/* Zerar Agenda */}
+                <Card className="border-red-100 hover:border-red-200 transition-colors">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-red-700 flex items-center text-lg">
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Zerar Agenda e Bloqueios
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Esta ação excluirá permanentemente TODOS os agendamentos e bloqueios de horário registrados para a empresa selecionada.
+                        </p>
+                        <p className="text-xs text-red-600/80 font-medium">
+                            Aviso: A estrutura da tabela e as configurações do sistema permanecerão intactas. Apenas os registros de dados serão limpos. Esta ação não pode ser desfeita.
+                        </p>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={!selectedEmpresa || loading === 'reset_agenda'}>
+                                    {loading === 'reset_agenda' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                                    Zerar Agenda
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Tem certeza absoluta?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Isto apagará permanentemente toda a <b>agenda de consultas e bloqueios</b> da empresa selecionada.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleMaintenanceAction('reset_agenda', 'Zerar Agenda')}>Confirmar Exclusão</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );

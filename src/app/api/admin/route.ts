@@ -457,6 +457,29 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, message: 'Orçamentos da empresa foram zerados.' });
         }
 
+        // ─── ZERAR AGENDA ───
+        if (action === 'reset_agenda') {
+            if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode zerar a agenda.' }, { status: 403 });
+            const { empresaId } = body;
+            if (!empresaId) return NextResponse.json({ error: 'ID da empresa é obrigatório.' }, { status: 400 });
+
+            const { error: agendaError } = await adminClient
+                .from('pet_agenda')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (agendaError) return NextResponse.json({ error: `Erro ao limpar agenda: ${agendaError.message}` }, { status: 500 });
+
+            const { error: bloqueiosError } = await adminClient
+                .from('pet_agenda_bloqueios')
+                .delete()
+                .eq('empresa_id', empresaId);
+
+            if (bloqueiosError) return NextResponse.json({ error: `Erro ao limpar bloqueios: ${bloqueiosError.message}` }, { status: 500 });
+
+            return NextResponse.json({ success: true, message: 'Agenda e bloqueios da empresa foram zerados.' });
+        }
+
         // ─── IMPORTAR EXAMES (TUSS/ANS) ───
         if (action === 'import_exams') {
             if (!caller.isMaster) return NextResponse.json({ error: 'Apenas Master pode importar exames.' }, { status: 403 });

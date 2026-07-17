@@ -6,6 +6,9 @@
 - **Remoção de Filtros Redundantes**: O filtro "Bloqueio - Todos" foi retirado da interface principal da Agenda Diária, simplificando a navegação.
 - **Filtro de Data na Lista de Bloqueios**: A aba "Bloquear" foi atualizada. O botão "Ver Lista" agora utiliza dois novos campos de data (Período Início e Fim) em vez de um seletor mensal, permitindo consultar de forma precisa os horários bloqueados em intervalos específicos.
 
+### 🛠️ Painel Master (Manutenção)
+- **Zerar Agenda e Bloqueios**: Implementada a funcionalidade para exclusão em lote de toda a agenda e bloqueios da empresa selecionada na aba de Manutenção, espelhando a funcionalidade do PacienteMobile.
+
 ## [2026-07-12] - Correções de Auditoria e Integração com Painel Supabase
 
 ### 📊 Correção de Métricas de Auditoria
