@@ -95,7 +95,6 @@ export default function AgendaPage() {
   const [selectedEndDate, setSelectedEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedMedicoId, setSelectedMedicoId] = useState('all');
   const [selectedTipo, setSelectedTipo] = useState('all');
-  const [selectedBlockStatus, setSelectedBlockStatus] = useState('all');
   const [selectedLocalFilter, setSelectedLocalFilter] = useState('');
   
 
@@ -154,7 +153,8 @@ export default function AgendaPage() {
   
   // Header Filters for Block List
   const [blockFilterMedicoId, setBlockFilterMedicoId] = useState('all');
-  const [blockFilterMonth, setBlockFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [blockFilterStartDate, setBlockFilterStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [blockFilterEndDate, setBlockFilterEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // Trigger search on mount and when filters change
   useEffect(() => {
@@ -184,18 +184,20 @@ export default function AgendaPage() {
     });
   };
 
-  const handleOpenBlockList = async (medicoId: string, monthPrefix?: string) => {
+  const handleOpenBlockList = async (medicoId: string, startDate?: string, endDate?: string) => {
     setBlockListModalMedicoId(medicoId);
     setIsBlockListModalOpen(true);
     setIsBlockListLoading(true);
     const data = await fetchBloqueios(medicoId);
-    console.log("[handleOpenBlockList] Fetched data:", data, "MonthPrefix:", monthPrefix);
+    console.log("[handleOpenBlockList] Fetched data:", data, "Start:", startDate, "End:", endDate);
     
-    // Filter by month if provided (e.g. "2026-07")
-    if (monthPrefix) {
+    // Filter by date range if provided
+    if (startDate && endDate) {
       const filtered = data.filter((b: any) => {
-        const match = b.data_inicio.startsWith(monthPrefix) || b.data_fim.startsWith(monthPrefix);
-        console.log(`[handleOpenBlockList] Filtering ${b.data_inicio} with ${monthPrefix}: ${match}`);
+        const bStart = b.data_inicio;
+        const bEnd = b.data_fim;
+        const match = bStart <= endDate && bEnd >= startDate;
+        console.log(`[handleOpenBlockList] Filtering ${b.data_inicio} - ${b.data_fim} with range ${startDate} - ${endDate}: ${match}`);
         return match;
       });
       setBlockListData(filtered);
@@ -890,19 +892,6 @@ export default function AgendaPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Bloqueio:</span>
-                      <Select value={selectedBlockStatus} onValueChange={setSelectedBlockStatus}>
-                        <SelectTrigger className="w-[140px] h-9 shadow-sm">
-                          <SelectValue placeholder="Todos" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="bloqueados">Bloqueados</SelectItem>
-                          <SelectItem value="livres">Livres</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">Local:</span>
                       <Input 
                         placeholder="Local agendado..."
@@ -945,8 +934,6 @@ export default function AgendaPage() {
                     </TableHeader>
                     <TableBody>
                       {agenda.filter(item => {
-                        if (selectedBlockStatus === 'bloqueados' && item.status !== 'Bloqueado') return false;
-                        if (selectedBlockStatus === 'livres' && item.status === 'Bloqueado') return false;
                         if (selectedLocalFilter && !item.local?.toLowerCase().includes(selectedLocalFilter.toLowerCase())) return false;
                         return true;
                       }).map((item) => {
@@ -1231,18 +1218,27 @@ export default function AgendaPage() {
                   </SelectContent>
                 </Select>
                 
-                <Input 
-                  type="month"
-                  value={blockFilterMonth}
-                  onChange={(e) => setBlockFilterMonth(e.target.value)}
-                  className="w-[140px] h-9 bg-background shadow-sm"
-                  title="Período do Relatório"
-                />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium">Período:</span>
+                  <Input 
+                    type="date"
+                    value={blockFilterStartDate}
+                    onChange={(e) => setBlockFilterStartDate(e.target.value)}
+                    className="w-[130px] h-9 bg-background shadow-sm"
+                  />
+                  <span className="text-sm text-muted-foreground">até</span>
+                  <Input 
+                    type="date"
+                    value={blockFilterEndDate}
+                    onChange={(e) => setBlockFilterEndDate(e.target.value)}
+                    className="w-[130px] h-9 bg-background shadow-sm"
+                  />
+                </div>
 
                 <Button 
                   size="sm"
                   className="h-9 whitespace-nowrap bg-primary/90 hover:bg-primary"
-                  onClick={() => handleOpenBlockList(blockFilterMedicoId, blockFilterMonth)}
+                  onClick={() => handleOpenBlockList(blockFilterMedicoId, blockFilterStartDate, blockFilterEndDate)}
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Ver Lista

@@ -1,5 +1,11 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-07-17] - Refinamento da Interface de Bloqueios da Agenda
+
+### 📅 Agenda e Bloqueios
+- **Remoção de Filtros Redundantes**: O filtro "Bloqueio - Todos" foi retirado da interface principal da Agenda Diária, simplificando a navegação.
+- **Filtro de Data na Lista de Bloqueios**: A aba "Bloquear" foi atualizada. O botão "Ver Lista" agora utiliza dois novos campos de data (Período Início e Fim) em vez de um seletor mensal, permitindo consultar de forma precisa os horários bloqueados em intervalos específicos.
+
 ## [2026-07-12] - Correções de Auditoria e Integração com Painel Supabase
 
 ### 📊 Correção de Métricas de Auditoria
