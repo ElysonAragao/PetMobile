@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit,
-  MapPin
+  MapPin,
+  ScanLine
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +37,7 @@ import { useAgenda } from '@/hooks/use-agenda';
 import { useVeterinarios } from '@/hooks/use-veterinarios';
 import { useToast } from '@/hooks/use-toast';
 import { PageTitle } from '@/components/layout/page-title';
+import { TattooScannerModal } from '@/components/tattoo-scanner-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -114,6 +116,7 @@ export default function AgendaPage() {
   const [formTutorNome, setFormTutorNome] = useState('');
   const [formPetNome, setFormPetNome] = useState('');
   const [formTutorTelefone, setFormTutorTelefone] = useState('');
+  const [formFotoUrl, setFormFotoUrl] = useState<string | null>(null);
 
   // State for Editing Appointment Dialog
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -155,6 +158,7 @@ export default function AgendaPage() {
   const [blockFilterMedicoId, setBlockFilterMedicoId] = useState('all');
   const [blockFilterStartDate, setBlockFilterStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [blockFilterEndDate, setBlockFilterEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Trigger search on mount and when filters change
   useEffect(() => {
@@ -274,6 +278,7 @@ export default function AgendaPage() {
     setFormPetNome('');
     setFormTutorTelefone('');
     setFormLocal('');
+    setFormFotoUrl(null);
   };
 
   // Submit appointment
@@ -310,7 +315,8 @@ export default function AgendaPage() {
       petNome: formPetNome,
       tutorTelefone: formTutorTelefone,
       tipo: formTipo,
-      local: formLocal
+      local: formLocal,
+      fotoUrl: formFotoUrl
     });
 
     if (result.success) {
@@ -1391,6 +1397,7 @@ export default function AgendaPage() {
                       className="shadow-sm"
                     />
                     <Button 
+                      id="btn-buscar-pet"
                       onClick={handlePetLookup} 
                       disabled={isSearchingPet}
                       variant="secondary"
@@ -1402,8 +1409,36 @@ export default function AgendaPage() {
                         <Search className="w-4 h-4" />
                       )}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 text-primary border-primary/30 hover:bg-primary/10"
+                      onClick={() => setIsScannerOpen(true)}
+                      title="Escanear Tatuagem do Pet"
+                    >
+                      <ScanLine className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
+
+                {formFotoUrl && (
+                  <div className="flex flex-col items-center mb-6 pt-4">
+                    <div className="relative group rounded-xl overflow-hidden border-2 border-primary shadow-lg w-32 h-32">
+                      <img src={formFotoUrl} alt="Tatuagem do Pet" className="w-full h-full object-cover" />
+                      <button 
+                        type="button" 
+                        onClick={() => setFormFotoUrl(null)} 
+                        className="absolute inset-0 bg-red-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white font-bold transition-all"
+                        title="Remover foto anexada"
+                      >
+                        <X className="w-8 h-8" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-primary font-bold flex items-center justify-center gap-1 mt-2 w-full text-center">
+                      Foto da tatuagem anexada
+                    </p>
+                  </div>
+                )}
 
                 {hasSearched && (
                   <div className="pt-2 border-t">
@@ -2108,6 +2143,23 @@ export default function AgendaPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <TattooScannerModal 
+        isOpen={isScannerOpen} 
+        onClose={() => setIsScannerOpen(false)} 
+        onConfirm={(tatuagem, fotoUrl) => {
+          if (tatuagem && tatuagem !== 'N/A') {
+            setLookupQuery(tatuagem);
+            setTimeout(() => {
+              const searchButton = document.getElementById('btn-buscar-pet');
+              if (searchButton) searchButton.click();
+            }, 100);
+          }
+          if (fotoUrl) {
+            setFormFotoUrl(fotoUrl);
+          }
+        }} 
+      />
     </>
   );
 }

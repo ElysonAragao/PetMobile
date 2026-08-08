@@ -20,6 +20,7 @@ export interface Pet {
   healthPlanName: string;
   matricula?: string; // Matrícula do plano pet
   idRegistro?: string; // Tatuagem
+  fotoUrl?: string | null; // Foto da tatuagem ou pet
   
   // Dados Familiares
   dadosFamiliaresAtivo?: boolean;
@@ -192,6 +193,7 @@ export interface AgendaItem {
   status: 'Agendado' | 'Cancelado' | 'Realizado' | 'Bloqueado';
   tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
   local?: string | null;
+  fotoUrl?: string | null;
   createdAt: string;
   createdBy?: string | null;
   // Join objects

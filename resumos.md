@@ -1,5 +1,18 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-08-08] - Motor de OCR para Tatuagens e Integração de Fluxo
+
+### 🔍 Laboratório de OCR e Auditoria de Testes
+- **Leitura de Tatuagem (App AutoMobile -> PetMobile)**: Importado o motor de OCR robusto (Tesseract.js) e interface de leitura de placas do AutoMobile, adaptado para leitura de tatuagens em pets.
+- **Histórico de Assertividade**: Criado o "Laboratório de OCR" (`/tattoo-scan`), que arquiva todos os testes em banco de dados (`pet_ocr_testes`), comparando o que a Inteligência Artificial leu vs. o texto corrigido manualmente pelo usuário.
+- **Auditoria de Imagem**: Todo teste agora salva a imagem (foto da tatuagem) gerada durante o escaneamento e permite impressão em PDF da lista de histórico.
+
+### 📅 Integração na Agenda e Cadastro
+- **Botão de Busca por Tatuagem**: A tela de Agenda e de Cadastro de Pets ganharam o botão de Leitura de Tatuagem.
+- **Busca Rápida**: Ao realizar a leitura na Agenda, o sistema auto-preenche e pesquisa o paciente pelo `id_registro` (Tatuagem).
+- **Foto de Auditoria no Check-in**: A imagem capturada pela recepcionista/médico durante a leitura é salva tanto no histórico do agendamento (`pet_agenda.foto_url`) quanto no cadastro do paciente (`pet_pets.foto_url`), garantindo o registro fotográfico à prova de fraudes.
+- **UX Consistente**: O modal escuro de scanner foi refinado com botões padronizados ("Voltar"), função de "Zoom por Clique", "Releitura Focada" e campos de edição manual.
+
 ## [2026-07-17] - Refinamento da Interface de Bloqueios da Agenda
 
 ### 📅 Agenda e Bloqueios

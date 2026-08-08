@@ -44,6 +44,7 @@ export const petSchema = z.object({
   dataInseminacao: z.string().optional().or(z.literal('')),
   quantidadeFilhos: z.string().optional().or(z.literal('')),
   filhos: z.array(z.object({ dataNascimento: z.string(), peso: z.string(), sexo: z.string() })).optional().default([]),
+  fotoUrl: z.string().optional().or(z.literal('')).nullable(),
 });
 
 export const calculateAge = (birthDate: string): string => {
@@ -161,6 +162,7 @@ export function usePets() {
           data_inseminacao,
           quantidade_filhos,
           filhos,
+          foto_url,
           created_at
         `)
         .order('nome');
@@ -210,7 +212,8 @@ export function usePets() {
         dataUltimaCria: row.data_ultima_cria,
         dataInseminacao: row.data_inseminacao,
         quantidadeFilhos: row.quantidade_filhos,
-        filhos: row.filhos || []
+        filhos: row.filhos || [],
+        fotoUrl: row.foto_url
       }));
 
       console.log(`Pets carregados: ${mappedData.length}`);
@@ -282,7 +285,8 @@ export function usePets() {
         dataUltimaCria: row.data_ultima_cria,
         dataInseminacao: row.data_inseminacao,
         quantidadeFilhos: row.quantidade_filhos,
-        filhos: row.filhos || []
+        filhos: row.filhos || [],
+        fotoUrl: row.foto_url
     }));
   }, [supabase, selectedEmpresaId]);
 
@@ -332,6 +336,7 @@ export function usePets() {
         data_inseminacao: petData.dataInseminacao || null,
         quantidade_filhos: petData.quantidadeFilhos || null,
         filhos: petData.filhos || [],
+        foto_url: petData.fotoUrl || null,
         empresa_id: selectedEmpresaId
       };
 
@@ -398,6 +403,7 @@ export function usePets() {
       if (petData.dataInseminacao !== undefined) dataToUpdate.data_inseminacao = petData.dataInseminacao;
       if (petData.quantidadeFilhos !== undefined) dataToUpdate.quantidade_filhos = petData.quantidadeFilhos;
       if (petData.filhos !== undefined) dataToUpdate.filhos = petData.filhos;
+      if (petData.fotoUrl !== undefined) dataToUpdate.foto_url = petData.fotoUrl;
 
       const { error: updateError } = await supabase
         .from('pet_pets')

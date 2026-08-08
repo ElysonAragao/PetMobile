@@ -4,7 +4,7 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer, Search } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer, Search, ScanLine, X, Camera } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -14,6 +14,7 @@ import { useHealthPlans } from '@/hooks/use-health-plans';
 import { useEspecies, Especie } from '@/hooks/use-especies';
 import { exportToCSV } from '@/lib/export-utils';
 import { PageTitle } from '@/components/layout/page-title';
+import { TattooScannerModal } from '@/components/tattoo-scanner-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -77,6 +78,7 @@ function PetForm({
   onCancel?: () => void
 }) {
   const nameInputRef = React.useRef<HTMLInputElement>(null);
+  const [isScannerOpen, setIsScannerOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (initialData && especies.length > 0) {
@@ -138,6 +140,7 @@ function PetForm({
         pesagens: initialData.pesagens || [],
         statusReprodutivo: initialData.statusReprodutivo || '',
         filhos: initialData.filhos || [],
+        fotoUrl: initialData.fotoUrl || null,
       } as any);
 
       // Sincronizar manualmente para garantir o visual imediato
@@ -170,6 +173,25 @@ function PetForm({
         onSubmit={form.handleSubmit(onSubmit)} 
         className="space-y-6"
       >
+        {form.watch('fotoUrl') && (
+          <div className="flex flex-col items-center mb-6">
+            <div className="relative group rounded-xl overflow-hidden border-2 border-primary shadow-lg w-48 h-48">
+              <img src={form.watch('fotoUrl')!} alt="Tatuagem do Pet" className="w-full h-full object-cover" />
+              <button 
+                type="button" 
+                onClick={() => form.setValue('fotoUrl', null)} 
+                className="absolute inset-0 bg-red-500/80 items-center justify-center hidden group-hover:flex text-white font-bold transition-all"
+                title="Remover foto anexada"
+              >
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+            <p className="text-xs text-primary font-bold flex items-center justify-center gap-1 mt-2 w-full text-center">
+              Foto da tatuagem anexada
+            </p>
+          </div>
+        )}
+
         {!isEdit && petsForCpf.length > 0 && (
           <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col sm:flex-row items-center gap-4">
             <div className="flex-1">
@@ -297,7 +319,18 @@ function PetForm({
                 <FormItem>
                   <FormLabel>ID-Registro (Tatuagem)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Identificação da Tatuagem" {...field} />
+                    <div className="flex gap-2">
+                      <Input placeholder="Identificação da Tatuagem" {...field} />
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="px-3 text-primary border-primary/30 hover:bg-primary/10" 
+                        onClick={() => setIsScannerOpen(true)}
+                        title="Ler tatuagem pela Câmera"
+                      >
+                        <ScanLine className="w-5 h-5" />
+                      </Button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -735,6 +768,19 @@ function PetForm({
             </Button>
           )}
         </div>
+
+        <TattooScannerModal 
+          isOpen={isScannerOpen} 
+          onClose={() => setIsScannerOpen(false)} 
+          onConfirm={(tatuagem, fotoUrl) => {
+            if (tatuagem && tatuagem !== 'N/A') {
+              form.setValue('idRegistro', tatuagem);
+            }
+            if (fotoUrl) {
+              form.setValue('fotoUrl', fotoUrl);
+            }
+          }} 
+        />
       </form>
     </Form>
   );

@@ -34,6 +34,7 @@ export function useAgenda() {
           status,
           tipo,
           local,
+          foto_url,
           created_at,
           created_by,
           medico:pet_usuarios!pet_agenda_medico_id_fkey(nome, crmv_uf),
@@ -78,6 +79,7 @@ export function useAgenda() {
         status: row.status,
         tipo: row.tipo || 'Consulta',
         local: row.local || null,
+        fotoUrl: row.foto_url || null,
         createdAt: row.created_at,
         createdBy: row.created_by,
         medico: row.medico ? { nome: row.medico.nome, crmv_uf: row.medico.crmv_uf } : undefined,
@@ -105,6 +107,7 @@ export function useAgenda() {
     tipo?: 'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia';
     local?: string;
     status?: 'Agendado' | 'Bloqueado';
+    fotoUrl?: string | null;
   }): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       if (!selectedEmpresaId) {
@@ -168,7 +171,8 @@ export function useAgenda() {
         status: agendaData.status || 'Agendado',
         tipo: agendaData.tipo || 'Consulta',
         local: agendaData.local || null,
-        created_by: usuarioId || null
+        created_by: usuarioId || null,
+        foto_url: agendaData.fotoUrl || null
       };
 
       const { error: insertError } = await supabase
@@ -351,8 +355,8 @@ export function useAgenda() {
       if (cleanQuery.toUpperCase().startsWith('PET')) {
         dbQuery = dbQuery.eq('cod_pet', cleanQuery.toUpperCase());
       } else {
-        // Tenta buscar por CPF exato ou código
-        dbQuery = dbQuery.or(`tutor_cpf.eq.${cleanQuery},cod_pet.eq.${cleanQuery}`);
+        // Tenta buscar por CPF exato ou código ou tatuagem (id_registro)
+        dbQuery = dbQuery.or(`tutor_cpf.eq.${cleanQuery},cod_pet.eq.${cleanQuery},id_registro.eq.${cleanQuery}`);
       }
 
       const { data, error: searchError } = await dbQuery;

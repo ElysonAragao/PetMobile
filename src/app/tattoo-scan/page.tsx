@@ -4,270 +4,142 @@ import * as React from 'react';
 import { PageTitle } from '@/components/layout/page-title';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Camera, Search, RefreshCw, Undo2, AlertTriangle, ScanLine, X } from 'lucide-react';
+import { ScanLine, Undo2, CheckCircle2, List, Camera, Printer } from 'lucide-react';
 import Link from 'next/link';
-import { createWorker } from 'tesseract.js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
+import { TattooScannerModal } from '@/components/tattoo-scanner-modal';
+import { createClient } from '@/lib/supabase/client';
+import { useSession } from '@/context/session-context';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 export default function TattooScanTestPage() {
-  const [imageSrc, setImageSrc] = React.useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = React.useState(false);
-  const [ocrResult, setOcrResult] = React.useState<string | null>(null);
-  const [confidence, setConfidence] = React.useState<number | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isScannerOpen, setIsScannerOpen] = React.useState(false);
+  const [result, setResult] = React.useState<{ tatuagem: string, fotoUrl: string | null, iaResult: string | null } | null>(null);
+  
+  // States para Histórico
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
+  const [history, setHistory] = React.useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
 
-  // --- WEBCAM STATES ---
-  const [isWebcamOpen, setIsWebcamOpen] = React.useState(false);
-  const [videoDevices, setVideoDevices] = React.useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState<string>('');
-  const [webcamStream, setWebcamStream] = React.useState<MediaStream | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const { selectedEmpresaId } = useSession();
+  const supabase = React.useMemo(() => createClient(), []);
+  const { toast } = useToast();
 
-  React.useEffect(() => {
-    // Listar câmeras quando abrir o modal
-    if (isWebcamOpen) {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-           stream.getTracks().forEach(track => track.stop());
-           return navigator.mediaDevices.enumerateDevices();
-        })
-        .then(devices => {
-           const videoInputs = devices.filter(device => device.kind === 'videoinput');
-           setVideoDevices(videoInputs);
-           if (videoInputs.length > 0 && !selectedDeviceId) {
-             setSelectedDeviceId(videoInputs[0].deviceId);
-           }
-        })
-        .catch(err => {
-           console.error("Erro ao acessar câmeras", err);
-           setError("Permissão de câmera negada ou nenhuma câmera encontrada.");
-        });
-    } else {
-      stopCamera();
-    }
-  }, [isWebcamOpen]);
-
-  React.useEffect(() => {
-    if (isWebcamOpen && selectedDeviceId) {
-      startCamera(selectedDeviceId);
-    }
-  }, [selectedDeviceId, isWebcamOpen]);
-
-  const startCamera = async (deviceId: string) => {
-    stopCamera();
+  const loadHistory = async () => {
+    if (!selectedEmpresaId) return;
+    setIsLoadingHistory(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      setWebcamStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Erro ao iniciar a câmera selecionada.");
-    }
-  };
-
-  const stopCamera = () => {
-    if (webcamStream) {
-      webcamStream.getTracks().forEach(t => t.stop());
-      setWebcamStream(null);
-    }
-  };
-
-  const captureFrame = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Tentar aplicar algum filtro de contraste para ajudar o OCR
-        ctx.filter = 'contrast(120%) grayscale(100%)';
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        setImageSrc(dataUrl);
-        setOcrResult(null);
-        setConfidence(null);
-        setError(null);
-        setIsWebcamOpen(false);
-      }
-    }
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImageSrc(e.target?.result as string);
-      setOcrResult(null);
-      setConfidence(null);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const processImage = async () => {
-    if (!imageSrc) return;
-    
-    setIsProcessing(true);
-    setError(null);
-    
-    try {
-      // Usando tesseract.js no lado do cliente
-      const worker = await createWorker('eng');
+      const { data, error } = await supabase
+        .from('pet_ocr_testes')
+        .select('*')
+        .eq('empresa_id', selectedEmpresaId)
+        .order('created_at', { ascending: false });
       
-      // Força a IA a procurar apenas letras, números e traços (ignora símbolos bizarros)
-      await worker.setParameters({
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-',
-      });
-      
-      const { data } = await worker.recognize(imageSrc);
-      
-      // Limpeza básica: removemos espaços extras e pegamos apenas letras/números
-      const cleanText = data.text.trim();
-      
-      setOcrResult(cleanText || "Nenhum texto detectado.");
-      setConfidence(data.confidence);
-      
-      await worker.terminate();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro ao processar imagem.");
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Erro", description: "Não foi possível carregar o histórico.", variant: "destructive" });
     } finally {
-      setIsProcessing(false);
+      setIsLoadingHistory(false);
     }
   };
 
-  const clearAll = () => {
-    setImageSrc(null);
-    setOcrResult(null);
-    setConfidence(null);
-    setError(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleOpenHistory = () => {
+    loadHistory();
+    setIsHistoryOpen(true);
+  };
+
+  const handleSaveTest = async (tatuagemFinal: string, fotoUrl: string | null, ocrOriginal: string | null) => {
+    if (!selectedEmpresaId) return;
+    
+    const corrigidoManualmente = (ocrOriginal !== tatuagemFinal);
+    
+    try {
+      await supabase.from('pet_ocr_testes').insert({
+        empresa_id: selectedEmpresaId,
+        texto_ia: ocrOriginal || 'N/A',
+        texto_final: tatuagemFinal,
+        corrigido_manualmente: corrigidoManualmente,
+        foto_url: fotoUrl
+      });
+      toast({ title: "Teste Arquivado", description: "O resultado foi salvo no banco de dados para auditoria." });
+    } catch (e) {
+      console.error("Erro ao salvar teste:", e);
+    }
+  };
+
+  const handlePrintHistory = () => {
+    window.print();
   };
 
   return (
     <>
-      <PageTitle title="Leitura de Tatuagem (Lab)" description="Validação e testes de extração de texto via OCR de tatuagens.">
+      <PageTitle title="Laboratório de OCR (Tatuagem)" description="Teste o novo motor de OCR do AutoMobile adaptado para o PetMobile.">
         <Link href="/" passHref>
           <Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar ao Painel</Button>
         </Link>
       </PageTitle>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4">
-        {/* ENTRADA DE IMAGEM */}
+      <div className="max-w-2xl mx-auto mt-8">
         <Card className="shadow-lg border-2 border-slate-100">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Camera className="h-5 w-5 text-primary" /> Entrada de Imagem</CardTitle>
-            <CardDescription>
-                Faça o upload ou tire uma foto da tatuagem para testar o algoritmo de leitura.<br/>
-                <strong className="text-red-500">DICA DE OURO:</strong> Tente focar apenas no número. Fundos grandes confundem a IA.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 flex flex-col items-center">
-            
-            <div className="w-full aspect-video bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden relative">
-              {imageSrc ? (
-                <img src={imageSrc} alt="Preview" className="w-full h-full object-contain" />
-              ) : (
-                <div className="text-center text-slate-400 p-6">
-                  <Upload className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhuma imagem carregada.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex w-full gap-2 flex-wrap sm:flex-nowrap">
-              <input 
-                type="file" 
-                accept="image/*" 
-                ref={fileInputRef} 
-                onChange={handleImageUpload} 
-                className="hidden" 
-              />
-              <Button onClick={() => fileInputRef.current?.click()} className="flex-1" variant="outline">
-                <Upload className="mr-2 h-4 w-4" /> Galeria / Arquivo
-              </Button>
-              <Button onClick={() => setIsWebcamOpen(true)} className="flex-1" variant="outline">
-                <Camera className="mr-2 h-4 w-4" /> Usar Câmera
+            <div className="flex justify-between items-center w-full">
+              <div>
+                <CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-primary" /> Teste Rápido do Scanner</CardTitle>
+                <CardDescription>
+                  Abra a modal, faça a captura e o sistema irá registrar automaticamente a assertividade no banco de dados.
+                </CardDescription>
+              </div>
+              <Button variant="outline" onClick={handleOpenHistory} className="gap-2">
+                <List className="w-4 h-4" />
+                Ver Histórico
               </Button>
             </div>
-            {imageSrc && (
-              <Button onClick={processImage} disabled={isProcessing} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
-                {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />}
-                {isProcessing ? 'Lendo...' : 'Extrair Texto'}
-              </Button>
-            )}
-            
-            {imageSrc && (
-              <Button onClick={clearAll} variant="ghost" className="text-red-500 hover:text-red-600 w-full">
-                <RefreshCw className="mr-2 h-4 w-4" /> Limpar e Recomeçar
-              </Button>
-            )}
-
-          </CardContent>
-        </Card>
-
-        {/* RESULTADO DO OCR */}
-        <Card className="shadow-lg border-2 border-slate-100 min-h-[400px]">
-          <CardHeader className="bg-slate-50/50 border-b pb-4">
-             <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5 text-indigo-500" /> Resultado da Leitura</CardTitle>
-             <CardDescription>Dados extraídos pela inteligência artificial (Tesseract.js).</CardDescription>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="space-y-6 flex flex-col items-center">
             
-            {isProcessing ? (
-               <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                  <Loader2 className="h-12 w-12 animate-spin text-indigo-500" />
-                  <p className="font-bold tracking-widest uppercase text-xs text-slate-500">Analisando pixels...</p>
-               </div>
-            ) : error ? (
-                <div className="flex flex-col items-center justify-center py-10 text-red-500 space-y-3">
-                  <AlertTriangle className="h-10 w-10" />
-                  <p className="font-medium text-center">{error}</p>
-                </div>
-            ) : ocrResult ? (
-              <div className="space-y-6">
-                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-center">
-                  <p className="text-sm text-indigo-400 font-bold uppercase mb-2">Texto Extraído Bruto:</p>
-                  <p className="text-4xl font-mono font-black text-indigo-700 tracking-widest">{ocrResult}</p>
+            <Button onClick={() => setIsScannerOpen(true)} size="lg" className="w-full h-16 text-lg bg-blue-600 hover:bg-blue-700">
+              <ScanLine className="mr-2 h-6 w-6" />
+              Abrir Leitor de Tatuagem
+            </Button>
+
+            {result && (
+              <div className="w-full bg-slate-50 p-6 rounded-xl border border-slate-200 mt-4 space-y-4 animate-in fade-in">
+                <div className="flex items-center gap-2 text-emerald-600 font-bold mb-4">
+                  <CheckCircle2 className="w-5 h-5" /> Resultado Final Capturado
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 border rounded-lg bg-slate-50 text-center">
-                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Confiança da IA</p>
-                    <p className="text-2xl font-bold text-slate-700">
-                      {confidence ? `${confidence.toFixed(1)}%` : 'N/A'}
-                    </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded border text-center">
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Lido pela IA</p>
+                    <p className="text-xl font-mono text-slate-400 line-through decoration-red-500">{result.iaResult || 'N/A'}</p>
                   </div>
-                  <div className="p-4 border rounded-lg bg-slate-50 text-center flex flex-col justify-center">
-                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Status para Busca</p>
-                    {confidence && confidence > 75 ? (
-                      <Badge variant="default" className="bg-emerald-500 mx-auto">Adequado</Badge>
+                  <div className="bg-white p-4 rounded border text-center">
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Texto Confirmado</p>
+                    <p className="text-2xl font-mono font-black text-emerald-700">{result.tatuagem}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded border text-center flex flex-col items-center">
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Foto para Auditoria</p>
+                    {result.fotoUrl ? (
+                      <div className="w-16 h-16 rounded overflow-hidden border">
+                        <img src={result.fotoUrl} alt="Foto" className="w-full h-full object-cover" />
+                      </div>
                     ) : (
-                      <Badge variant="destructive" className="mx-auto">Baixa Confiança</Badge>
+                      <Camera className="w-8 h-8 text-slate-300 mt-2" />
                     )}
                   </div>
                 </div>
-
-                <div className="text-xs text-slate-500 italic p-4 bg-slate-50 rounded-lg border border-dashed">
-                  <strong>Dica de Validação:</strong> Se os resultados forem insatisfatórios de forma consistente, a migração para a API de Visão do Google Cloud será necessária para o módulo de produção.
+                
+                <div className="text-center mt-2">
+                  {result.tatuagem === result.iaResult ? (
+                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full border border-emerald-200">Leitura Perfeita (IA Acertou)</span>
+                  ) : (
+                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full border border-amber-200">Corrigido Manualmente (Usuário Alterou)</span>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-300 opacity-50 space-y-4">
-                  <ScanLine className="h-16 w-16" />
-                  <p className="font-medium italic text-center px-8">Carregue ou capture uma imagem para processar a leitura.</p>
+                
+                <p className="text-xs text-slate-400 italic text-center mt-4">Este teste já foi gravado no banco de dados.</p>
               </div>
             )}
 
@@ -275,65 +147,82 @@ export default function TattooScanTestPage() {
         </Card>
       </div>
 
-      {/* WEBCAM DIALOG */}
-      <Dialog open={isWebcamOpen} onOpenChange={setIsWebcamOpen}>
-        <DialogContent className="sm:max-w-xl">
+      <TattooScannerModal 
+        isOpen={isScannerOpen} 
+        onClose={() => setIsScannerOpen(false)} 
+        onConfirm={(tatuagem, fotoUrl, iaResult) => {
+          setResult({ tatuagem, fotoUrl, iaResult });
+          handleSaveTest(tatuagem, fotoUrl, iaResult);
+        }} 
+      />
+
+      {/* HISTÓRICO DIALOG */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Câmera para Tatuagem</DialogTitle>
+            <DialogTitle>Histórico de Testes de Leitura</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            {videoDevices.length > 1 && (
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1.5">
-                  Selecionar Câmera
-                </Label>
-                <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Escolha a câmera..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {videoDevices.map((device, index) => (
-                      <SelectItem key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Câmera ${index + 1}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <div className="mt-4">
+            {isLoadingHistory ? (
+              <p className="text-center text-slate-500 py-8">Carregando histórico...</p>
+            ) : history.length === 0 ? (
+              <p className="text-center text-slate-500 py-8">Nenhum teste registrado ainda.</p>
+            ) : (
+              <div className="grid gap-4">
+                {history.map((h) => (
+                  <div key={h.id} className="flex gap-4 border rounded-xl p-4 items-center bg-slate-50">
+                    <div className="w-24 h-24 shrink-0 bg-black rounded-lg overflow-hidden">
+                      {h.foto_url ? (
+                        <img src={h.foto_url} alt="Scan" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400">Sem Foto</div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-xs text-slate-500">{new Date(h.created_at).toLocaleString()}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Lido pela IA</span>
+                              <span className={`font-mono ${h.corrigido_manualmente ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                {h.texto_ia}
+                              </span>
+                            </div>
+                            {h.corrigido_manualmente && (
+                              <div>
+                                <span className="text-[10px] uppercase font-bold text-amber-600 block">Corrigido Para</span>
+                                <span className="font-mono font-bold text-amber-700">{h.texto_final}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          {h.corrigido_manualmente ? (
+                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-1 rounded">ALTERADO</span>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-1 rounded">100% IA</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            <div className="aspect-video bg-black rounded-lg overflow-hidden relative flex items-center justify-center border-2 border-slate-800">
-              <video 
-                ref={videoRef} 
-                className="w-full h-full object-cover" 
-                autoPlay 
-                playsInline 
-                muted 
-              />
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                 <div className="w-48 h-16 border-2 border-dashed border-green-500/70 rounded-md"></div>
-              </div>
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setIsWebcamOpen(false)}>Cancelar</Button>
-              <Button onClick={captureFrame} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                <Camera className="w-4 h-4 mr-2" />
-                Capturar e Analisar
-              </Button>
-            </div>
+          </div>
+          <div className="flex justify-between items-center w-full mt-6 pt-4 border-t border-slate-100">
+            <Button variant="outline" className="gap-2" onClick={handlePrintHistory}>
+              <Printer className="w-4 h-4" />
+              Imprimir Histórico
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => setIsHistoryOpen(false)}>
+              <Undo2 className="w-4 h-4" />
+              Voltar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
     </>
   );
-}
-
-// Simple Badge component mockup since we didn't import it from standard lib
-function Badge({ children, className, variant = 'default' }: { children: React.ReactNode, className?: string, variant?: 'default' | 'destructive' }) {
-  const base = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
-  const variants = {
-    default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-    destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-  };
-  return <div className={`${base} ${variants[variant]} ${className}`}>{children}</div>;
 }
