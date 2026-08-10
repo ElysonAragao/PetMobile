@@ -4,9 +4,10 @@ import * as React from 'react';
 import { z } from "zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer, Search, ScanLine, X, Camera } from 'lucide-react';
+import { PlusCircle, Plus, Trash2, PawPrint, Edit, ArrowUpDown, Loader2, HeartPulse, Undo2, Download, FileText, Printer, Search, ScanLine, X, Camera, ClipboardList } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useSession } from '@/context/session-context';
 
 import { Pet, HealthPlan } from '@/lib/types';
 import { usePets, PetFormValues, petSchema, calculateAge } from '@/hooks/use-pets';
@@ -79,6 +80,10 @@ function PetForm({
 }) {
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const [isScannerOpen, setIsScannerOpen] = React.useState(false);
+  const { user } = useSession();
+  const router = useRouter();
+  const canAccessProntuario = user?.status === 'Administrador' || user?.status === 'Veterinário' || user?.status === 'Master';
+  const hasValidId = initialData && 'id' in initialData && initialData.id;
 
   React.useEffect(() => {
     if (initialData && especies.length > 0) {
@@ -747,25 +752,41 @@ function PetForm({
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-3">
-          <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Salvando...' : (
-              <>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                {isEdit ? 'Salvar Alterações' : 'Cadastrar Pet'}
-              </>
-            )}
-          </Button>
-          
-          {onCancel && (
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="w-full md:w-auto"
-              onClick={onCancel}
-            >
-              Cancelar
+        <div className="flex flex-col md:flex-row gap-3 items-center w-full">
+          <div className="flex flex-col md:flex-row gap-3 flex-1 w-full">
+            <Button type="submit" className="w-full md:w-auto" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? 'Salvando...' : (
+                <>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  {isEdit ? 'Salvar Alterações' : 'Cadastrar Pet'}
+                </>
+              )}
             </Button>
+            
+            {onCancel && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full md:w-auto"
+                onClick={onCancel}
+              >
+                Cancelar
+              </Button>
+            )}
+          </div>
+          
+          {hasValidId && canAccessProntuario && (
+            <div className="w-full md:w-auto flex justify-end">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full md:w-auto border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-bold"
+                onClick={() => router.push(`/pets/${initialData?.id}/prontuario`)}
+              >
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Abrir Prontuário
+              </Button>
+            </div>
           )}
         </div>
 
@@ -1122,6 +1143,8 @@ export default function PetsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchId = searchParams.get('searchId');
+  const source = searchParams.get('source');
+  const backUrl = source === 'tattoo-scan' ? '/tattoo-scan' : '/';
   const [activeTab, setActiveTab] = React.useState(searchParams.get('tab') || "list");
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
   const [selectedPet, setSelectedPet] = React.useState<Pet | null>(null);
@@ -1147,12 +1170,14 @@ export default function PetsPage() {
       const tutorNome = searchParams.get('tutorNome') || '';
       const tutorTelefone = searchParams.get('tutorTelefone') || '';
       const petNome = searchParams.get('petNome') || '';
+      const tatuagem = searchParams.get('tatuagem') || '';
       
       form.reset({
         nome: petNome,
         tutorNome: tutorNome,
         tutorCpf: tutorCpf,
         tutorTelefone: tutorTelefone,
+        idRegistro: tatuagem,
         especie: '',
         raca: '',
         sexo: 'M',
@@ -1165,7 +1190,7 @@ export default function PetsPage() {
         healthPlanCode: '',
         healthPlanName: '',
         matricula: '',
-        idRegistro: '', dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
+        dadosFamiliaresAtivo: false, paiNome: '', paiRegistro: '', paiInseminacao: false, semenRegistro: '', maeNome: '', maeRegistro: '', paiPedigree: '', maePedigree: '', dadosMovimentacaoAtivo: false, pesagens: [], statusReprodutivo: '', filhos: []
       } as any);
       
       setIsCpfLocked(!!tutorCpf);
@@ -1254,7 +1279,7 @@ export default function PetsPage() {
   return (
     <>
       <PageTitle title="Gerenciamento de Pets" description="Controle de prontuários, tutores e planos veterinários.">
-        <Link href="/" passHref><Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar</Button></Link>
+        <Link href={backUrl} passHref><Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar</Button></Link>
       </PageTitle>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

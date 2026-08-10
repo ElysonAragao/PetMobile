@@ -1,5 +1,20 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-08-10] - Automação Total do Scanner de Tatuagens e Integração de Prontuário
+
+### 🔄 Fluxo de Navegação Inteligente (Scanner)
+- **Decisão Dinâmica:** O scanner agora interage com o banco de dados (`pet_pets`) para verificar a existência da tatuagem escaneada em tempo real.
+- **Redirecionamento Automático:** 
+  - Se o pet já existir: O sistema redireciona diretamente para a tela de edição do cadastro (`editPetId`).
+  - Se o pet não existir: O sistema abre a tela de cadastro populando automaticamente o formulário com a tatuagem escaneada (`prefill=true`).
+- **Botão Voltar Dinâmico:** Implementado um parâmetro oculto (`source=tattoo-scan`) que ajusta o botão "Voltar" das telas de Ficha de Pet e Prontuário para garantir o retorno ao Scanner, criando um ciclo contínuo sem passar pelo Menu Principal.
+
+### 🏥 Acesso Rápido ao Prontuário Clínico
+- **Integração de Prontuário no Scanner:** O histórico de leituras de tatuagem no scanner agora possui um botão direto de "Prontuário", permitindo visualizar a clínica sem abrir a ficha do animal.
+- **Autorização Restrita:** Esse botão só é renderizado e acessível se o usuário ativo tiver permissões de "Master", "Administrador" ou "Veterinário".
+- **Botão na Ficha Cadastral:** Para manter a consistência, a ficha do animal (PetForm) também recebeu o botão "Abrir Prontuário" na barra de ações principal.
+
+
 ## [2026-08-08] - Motor de OCR para Tatuagens e Integração de Fluxo
 
 ### 🔍 Laboratório de OCR e Auditoria de Testes

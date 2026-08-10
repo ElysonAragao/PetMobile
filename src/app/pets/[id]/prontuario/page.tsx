@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Undo2, Plus, FileText, Activity, CalendarDays, Download, Stethoscope, Edit2, FilePlus, QrCode, UploadCloud, Printer, Trash2, Image as ImageIcon, X } from 'lucide-react';
 import { useForm } from "react-hook-form";
@@ -98,6 +98,9 @@ function numeroPorExtenso(numero: number): string {
 export default function ProntuarioPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const source = searchParams?.get('source');
+  const backUrl = source === 'tattoo-scan' ? '/tattoo-scan' : `/pets?searchId=${id}`;
   const { pets, isLoaded: petsLoaded } = usePets();
   const { users, isLoaded: usersLoaded } = useUsers();
   const { prontuarios, isLoaded: prontLoaded, addProntuario, updateProntuario, deleteProntuario } = useProntuarios(id);
@@ -451,7 +454,7 @@ ${reciboData.cidadeEstado}, ${dataHoje}`;
           <Button onClick={() => router.push(`/movement?mode=guia&newPetId=${pet.id}&from=prontuario`)} variant="default" className="bg-[#008f5d] hover:bg-[#007b50] text-white rounded-md shadow-sm">
             <QrCode className="mr-2 h-4 w-4" /> Solicitar Guia de Exames
           </Button>
-          <Button variant="outline" className="bg-white shadow-sm" onClick={() => router.back()}>
+          <Button variant="outline" className="bg-white shadow-sm" onClick={() => router.push(backUrl)}>
             <Undo2 className="mr-2 h-4 w-4" /> Voltar
           </Button>
         </div>

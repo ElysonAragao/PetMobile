@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, ScanLine, X, Loader2, CheckCircle2, Upload, RefreshCw, Undo2 } from 'lucide-react';
+import { Camera, ScanLine, X, Loader2, CheckCircle2, Upload, RefreshCw, Undo2, Mic, Keyboard } from 'lucide-react';
 import { createWorker } from 'tesseract.js';
 
 interface TattooScannerModalProps {
@@ -13,6 +13,12 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
   const [isProcessingOcr, setIsProcessingOcr] = useState(false);
   const [ocrResult, setOcrResult] = useState<string | null>(null);
   const [editedTattoo, setEditedTattoo] = useState<string>('');
+  const editedTattooRef = React.useRef(editedTattoo);
+  useEffect(() => {
+    editedTattooRef.current = editedTattoo;
+  }, [editedTattoo]);
+  const [isListening, setIsListening] = useState(false);
+  const [inputMode, setInputMode] = useState<'voice' | 'text'>('voice');
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [reviewZoom, setReviewZoom] = useState(1);
   const [zoomOrigin, setZoomOrigin] = useState('center center');
@@ -277,9 +283,116 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
     }
   };
 
+  const startListening = () => {
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setOcrError("Reconhecimento de voz não suportado neste navegador.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false; // continuous=true is buggy, we'll use auto-restart instead
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setOcrError(null);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      let transcriptUpper = transcript.toUpperCase();
+      
+      // Remove acentos para que letras como 'É', 'Á' sejam lidas como 'E', 'A'
+      transcriptUpper = transcriptUpper.normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+      // Remove a palavra "LETRA" caso o usuário fale "Letra E..."
+      transcriptUpper = transcriptUpper.replace(/\bLETRA\b/g, '');
+      
+      const numberMap: Record<string, string> = {
+        'ZERO': '0', 'UM': '1', 'UMA': '1', 'DOIS': '2', 'DUAS': '2',
+        'TRÊS': '3', 'TRES': '3', 'QUATRO': '4', 'CINCO': '5',
+        'SEIS': '6', 'MEIA': '6', 'SETE': '7', 'OITO': '8', 'NOVE': '9'
+      };
+
+      Object.keys(numberMap).forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'g');
+        transcriptUpper = transcriptUpper.replace(regex, numberMap[word]);
+      });
+
+      let spokenCode = transcriptUpper.replace(/[^A-Z0-9]/g, '');
+      
+      // Comandos para voltar / refazer
+      const restartWords = ['VOLTAR', 'REFAZER', 'NOVAFOTO', 'NOVALEITURA', 'CANCELAR'];
+      for (const word of restartWords) {
+        if (spokenCode.includes(word)) {
+           recognition.stop();
+           setOcrResult(null); 
+           setImageSrc(null); 
+           setIsWebcamOpen(true);
+           return;
+        }
+      }
+
+      const confirmWords = ['CONFIRMAR', 'CONFIRMA', 'SALVAR'];
+      let isConfirming = false;
+      
+      for (const word of confirmWords) {
+        if (spokenCode.includes(word)) {
+          isConfirming = true;
+          spokenCode = spokenCode.replace(word, '');
+        }
+      }
+
+      if (spokenCode) {
+        setEditedTattoo(spokenCode);
+      }
+
+      if (isConfirming) {
+        recognition.stop();
+        const finalTattoo = spokenCode || editedTattooRef.current;
+        setOcrResult(null); // Impede o auto-restart
+        onConfirm(finalTattoo, imageSrc, ocrResult);
+        setImageSrc(null);
+        setEditedTattoo('');
+        editedTattooRef.current = '';
+        setIsWebcamOpen(true);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error !== 'no-speech') {
+        setIsListening(false);
+        setOcrError("Erro ao ouvir. Tente falar novamente.");
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  useEffect(() => {
+    if (ocrResult && inputMode === 'voice' && !isListening) {
+      const timer = setTimeout(() => {
+        startListening();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocrResult, inputMode, isListening]);
+
   const confirmarRevisao = () => {
     onConfirm(editedTattoo, imageSrc, ocrResult);
-    closeOcrModal();
+    setOcrResult(null);
+    setImageSrc(null);
+    setEditedTattoo('');
+    editedTattooRef.current = '';
+    setIsWebcamOpen(true);
   };
 
   const closeOcrModal = () => {
@@ -371,19 +484,60 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
                 </div>
                 
                 <div className="mb-2">
-                  <label className="block text-sm font-bold text-white mb-2 text-center md:text-left">Digite a Tatuagem Correta</label>
-                  <input 
-                    type="text" 
-                    value={editedTattoo} 
-                    onChange={(e) => setEditedTattoo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
-                    className="w-full bg-black border-2 border-blue-500/50 rounded-xl px-4 py-3 text-white text-center text-3xl uppercase font-black tracking-widest focus:border-blue-500 focus:shadow-[0_0_20px_rgba(59,130,246,0.3)] outline-none transition-all"
-                    maxLength={15}
-                    autoFocus
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck="false"
-                    autoComplete="off"
-                  />
+                  <label className="block text-sm font-bold text-white mb-2 text-center md:text-left">
+                    {inputMode === 'voice' ? 'Fale a Tatuagem Correta' : 'Digite a Tatuagem Correta'}
+                  </label>
+                  
+                  {inputMode === 'voice' ? (
+                    <div className="flex flex-col items-center gap-3 bg-black/40 p-5 rounded-2xl border border-slate-800 shadow-inner">
+                      <button 
+                        onClick={startListening}
+                        disabled={isListening}
+                        className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${isListening ? 'bg-rose-500 text-white shadow-[0_0_40px_rgba(244,63,94,0.5)] animate-pulse scale-110' : 'bg-slate-800 text-blue-400 hover:bg-slate-700 hover:text-blue-300 hover:scale-105'}`}
+                      >
+                        <Mic className={isListening ? "w-10 h-10" : "w-8 h-8"} />
+                      </button>
+                      
+                      <div className="text-center min-h-[50px] flex flex-col items-center justify-center">
+                        <p className={`text-sm font-bold ${isListening ? 'text-rose-400' : 'text-slate-400'}`}>
+                          {isListening ? "Ouvindo... Fale o código agora" : "Clique no microfone para falar"}
+                        </p>
+                        {editedTattoo && (
+                          <p className="text-2xl font-black text-white tracking-widest mt-2 bg-slate-900 px-4 py-1.5 rounded-lg border border-slate-700 shadow-lg">
+                            {editedTattoo}
+                          </p>
+                        )}
+                      </div>
+
+                      <button 
+                        onClick={() => setInputMode('text')}
+                        className="text-slate-500 hover:text-slate-300 text-xs font-bold flex items-center gap-1.5 bg-slate-900/80 px-4 py-2 rounded-xl transition-colors mt-2 border border-slate-800/50"
+                      >
+                        <Keyboard className="w-4 h-4" /> Digitar manualmente
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4 bg-black/40 p-5 rounded-2xl border border-slate-800 shadow-inner">
+                      <input 
+                        type="text" 
+                        value={editedTattoo} 
+                        onChange={(e) => setEditedTattoo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
+                        className="w-full bg-black border-2 border-blue-500/50 rounded-xl px-4 py-4 text-white text-center text-3xl uppercase font-black tracking-widest focus:border-blue-500 focus:shadow-[0_0_20px_rgba(59,130,246,0.3)] outline-none transition-all"
+                        maxLength={15}
+                        autoFocus
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck="false"
+                        autoComplete="off"
+                      />
+                      <button 
+                        onClick={() => { setInputMode('voice'); setTimeout(startListening, 100); }}
+                        className="text-blue-400 hover:text-blue-300 text-xs font-bold flex items-center gap-1.5 justify-center bg-blue-500/10 hover:bg-blue-500/20 px-4 py-2 rounded-xl transition-colors mx-auto border border-blue-500/20"
+                      >
+                        <Mic className="w-4 h-4" /> Voltar para comando de voz
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
