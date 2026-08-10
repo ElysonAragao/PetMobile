@@ -29,7 +29,7 @@ export default function TattooScanTestPage() {
   const [isCheckingTattoo, setIsCheckingTattoo] = React.useState<string | null>(null);
   const [isDeleting, setIsDeleting] = React.useState<string | null>(null);
 
-  const canAccessProntuario = user?.status === 'Administrador' || user?.status === 'Veterinário' || user?.status === 'Master';
+  const canAccessProntuario = user?.status === 'Administrador' || user?.status === 'MedicoVet' || user?.status === 'MedicoVet Geral' || user?.status === 'Master';
 
   const handleDeleteTest = async (id: string | undefined) => {
     if (!id || !selectedEmpresaId) return;

@@ -82,7 +82,7 @@ function PetForm({
   const [isScannerOpen, setIsScannerOpen] = React.useState(false);
   const { user } = useSession();
   const router = useRouter();
-  const canAccessProntuario = user?.status === 'Administrador' || user?.status === 'Veterinário' || user?.status === 'Master';
+  const canAccessProntuario = user?.status === 'Administrador' || user?.status === 'MedicoVet' || user?.status === 'MedicoVet Geral' || user?.status === 'Master';
   const hasValidId = initialData && 'id' in initialData && initialData.id;
 
   React.useEffect(() => {
