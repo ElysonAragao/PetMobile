@@ -310,6 +310,16 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
       // Remove a palavra "LETRA" caso o usuário fale "Letra E..."
       transcriptUpper = transcriptUpper.replace(/\bLETRA\b/g, '');
       
+      // LIMPEZA DE RUÍDO: Se a pessoa usar o comando "FALAR" ou "CÓDIGO", 
+      // ignoramos todo o "lixo" capturado antes dessa palavra e pegamos só o que vem depois.
+      if (transcriptUpper.includes('FALAR')) {
+          const parts = transcriptUpper.split('FALAR');
+          transcriptUpper = parts[parts.length - 1];
+      } else if (transcriptUpper.includes('CODIGO')) {
+          const parts = transcriptUpper.split('CODIGO');
+          transcriptUpper = parts[parts.length - 1];
+      }
+      
       const numberMap: Record<string, string> = {
         'ZERO': '0', 'UM': '1', 'UMA': '1', 'DOIS': '2', 'DUAS': '2',
         'TRÊS': '3', 'TRES': '3', 'QUATRO': '4', 'CINCO': '5',
