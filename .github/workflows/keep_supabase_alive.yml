@@ -12,6 +12,7 @@ jobs:
     steps:
       - name: Ping Supabase API
         run: |
-          curl -f -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_pets?select=id&limit=1" \
+          TIMESTAMP=$(date +%s)
+          curl -f -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_pets?select=id&limit=1&_t=$TIMESTAMP" \
           -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
           -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
