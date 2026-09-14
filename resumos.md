@@ -281,3 +281,12 @@ Implementamos um sistema de IDs altamente escalável e autoexplicativo:
 - **Novos Campos Vitais**: O formulário do Pet ganhou o controle avançado de Histórico Reprodutivo (Data da última cria, data de inseminação/cobertura, e quantidade de filhos).
 - **Adequação ao Zod e Supabase**: Atualizamos o schema de persistência (usePets), garantindo que pets fêmeas (ou machos) mantenham os metadados zootécnicos salvos de forma íntegra no banco de dados.
 - **Aprimoramento Visual (Botão Cancelar)**: Melhoramos o fluxo de preenchimento do formulário modal, dando ao usuário a opção imediata de desistir da edição, preservando a experiência em telas de celular.
+
+---
+
+## [2026-09-14] - Auditoria de Inatividade do Supabase (Cron Jobs)
+
+### ⏱️ Cron Jobs e Keep-Alive
+- **Vercel Cron Jobs**: Configuração de ercel.json para disparar rotas de forma agendada no Vercel (0 0 * * *). Implementado para os projetos PetMobile, PacienteMobile e AutoMobile.
+- **Rota API Keep-Alive**: Criada rota /api/cron/keep-alive/route.ts que executa um 'ping' de leitura no Supabase via REST (/rest/v1/?_t=...) utilizando as credenciais nativas de ambiente. Isso registra atividade diária de leitura no banco, impedindo a pausa dos projetos por inatividade imposta pelos planos gratuitos.
+- **Tratamento de BOM (UTF-8)**: Corrigido o problema de BOM (Byte Order Mark) invisível gerado ao manipular arquivos no Windows, que tornava o arquivo ercel.json inválido durante o build do Vercel.
