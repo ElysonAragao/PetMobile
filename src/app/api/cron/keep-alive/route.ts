@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,17 +12,17 @@ export async function GET() {
     }
 
     const timestamp = Date.now();
-    const response = await fetch(${supabaseUrl}/rest/v1/?_t=, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/?_t=${timestamp}`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
-        'Authorization': Bearer 
+        'Authorization': `Bearer ${supabaseKey}`
       },
       cache: 'no-store'
     });
 
     if (!response.ok && response.status !== 401) {
-      throw new Error(Supabase ping failed:  );
+      throw new Error(`Supabase ping failed: ${response.status} ${response.statusText}`);
     }
 
     return NextResponse.json({ success: true, timestamp, status: response.status }, { status: 200 });
