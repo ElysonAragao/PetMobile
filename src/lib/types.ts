@@ -196,10 +196,35 @@ export interface AgendaItem {
   fotoUrl?: string | null;
   createdAt: string;
   createdBy?: string | null;
+  
+  // Agendamentos Encadeados (Cascata)
+  templateId?: string | null;
+  etapaOrdem?: number | null;
+  grupoId?: string | null;
+  parentId?: string | null;
+
   // Join objects
   medico?: { nome: string; crmv_uf?: string };
   pet?: { nome: string; codPet?: string };
   criador?: { nome: string };
+}
+
+export interface AgendaTemplateEtapa {
+  id: string;
+  templateId: string;
+  ordem: number;
+  nomeEtapa: string;
+  diasAposAnterior: number;
+  createdAt?: string;
+}
+
+export interface AgendaTemplate {
+  id: string;
+  empresaId: string;
+  nome: string;
+  pularFinaisDeSemana: boolean;
+  createdAt: string;
+  etapas?: AgendaTemplateEtapa[];
 }
 
 export interface Material {

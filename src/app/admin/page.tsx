@@ -7,11 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 import {
     Building2, Users, PlusCircle, Trash2, Edit, KeyRound, Undo2,
     Loader2, ArrowUpDown, Shield, RotateCcw, UploadCloud, Stethoscope, Download,
-    Database, HardDrive, Activity
+    Database, HardDrive, Activity, CalendarRange
 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import * as xlsx from "xlsx";
+import { ProtocolosTab } from "./protocolos-tab";
 
 import { PageTitle } from "@/components/layout/page-title";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1571,6 +1572,9 @@ export default function AdminPage() {
                     <TabsTrigger value="especialidades">
                         <Stethoscope className="mr-2 h-4 w-4" />Especialidades
                     </TabsTrigger>
+                    <TabsTrigger value="protocolos">
+                        <CalendarRange className="mr-2 h-4 w-4" />Protocolos
+                    </TabsTrigger>
                     <TabsTrigger value="auditoria">
                         <Activity className="mr-2 h-4 w-4" />Auditoria
                     </TabsTrigger>
@@ -1596,6 +1600,10 @@ export default function AdminPage() {
                     <EspecialidadesTab />
                 </TabsContent>
                 
+                <TabsContent value="protocolos" className="mt-6">
+                    <ProtocolosTab />
+                </TabsContent>
+
                 <TabsContent value="auditoria" className="mt-6">
                     <AuditoriaTab />
                 </TabsContent>

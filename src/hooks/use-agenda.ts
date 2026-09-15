@@ -188,6 +188,123 @@ export function useAgenda() {
     }
   }, [supabase, selectedEmpresaId]);
 
+  const addAgendaComProtocolo = useCallback(async (
+    agendaData: {
+      medicoId: string | null;
+      dataAgendamento: string;
+      petId: string | null;
+      tutorCpf: string;
+      tutorNome: string;
+      petNome: string;
+      tutorTelefone: string;
+      tipo?: string;
+      local?: string;
+      status?: 'Agendado' | 'Bloqueado';
+      fotoUrl?: string | null;
+    },
+    templateId: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!selectedEmpresaId) throw new Error('Clínica não selecionada.');
+      const { data: { user } } = await supabase.auth.getUser();
+      const usuarioId = user?.id;
+
+      // 1. Fetch template e etapas
+      const { data: template, error: tmplErr } = await supabase
+        .from('pet_agenda_templates')
+        .select(`*, etapas:pet_agenda_template_etapas(*)`)
+        .eq('id', templateId)
+        .single();
+        
+      if (tmplErr || !template) throw new Error("Protocolo não encontrado");
+
+      const grupoId = crypto.randomUUID();
+      
+      const payloadBase = {
+        empresa_id: selectedEmpresaId,
+        medico_id: agendaData.medicoId || null,
+        pet_id: agendaData.petId || null,
+        tutor_cpf: agendaData.tutorCpf.trim(),
+        tutor_nome: agendaData.tutorNome.trim(),
+        pet_nome: agendaData.petNome.trim(),
+        tutor_telefone: agendaData.tutorTelefone?.trim() || null,
+        status: agendaData.status || 'Agendado',
+        tipo: `${template.nome} - Etapa_01`, // O agendamento principal assume o nome do protocolo + Etapa_01
+        local: agendaData.local || null,
+        created_by: usuarioId || null,
+        foto_url: agendaData.fotoUrl || null,
+        template_id: template.id,
+        grupo_id: grupoId
+      };
+
+      // 2. Inserir agendamento D01
+      const { data: d01, error: errD01 } = await supabase
+        .from('pet_agenda')
+        .insert({
+          ...payloadBase,
+          data_agendamento: agendaData.dataAgendamento,
+          etapa_ordem: 0
+        })
+        .select('id')
+        .single();
+        
+      if (errD01) throw errD01;
+
+      // 3. Inserir etapas
+      const etapas = template.etapas || [];
+      // Ordenar etapas para garantir que criamos na sequência correta (dependência parent_id)
+      etapas.sort((a: any, b: any) => a.ordem - b.ordem);
+      
+      let parentId = d01.id;
+      let dataAnterior = new Date(agendaData.dataAgendamento);
+      
+      // Função auxiliar para somar dias
+      const addDays = (date: Date, days: number, skipWeekends: boolean) => {
+        let d = new Date(date);
+        let added = 0;
+        while (added < days) {
+          d.setDate(d.getDate() + 1);
+          if (skipWeekends) {
+            if (d.getDay() !== 0 && d.getDay() !== 6) {
+              added++;
+            }
+          } else {
+            added++;
+          }
+        }
+        return d;
+      };
+
+      for (const etapa of etapas) {
+        const dataEtapa = addDays(dataAnterior, etapa.dias_apos_anterior, template.pular_finais_de_semana);
+        // Manter o formato YYYY-MM-DDTHH:mm preservando a hora do D01 original
+        const timePart = agendaData.dataAgendamento.includes('T') ? agendaData.dataAgendamento.split('T')[1] : '00:00';
+        const dataStr = dataEtapa.toISOString().split('T')[0] + 'T' + timePart; 
+        
+        const { data: dSub, error: errSub } = await supabase
+          .from('pet_agenda')
+          .insert({
+            ...payloadBase,
+            data_agendamento: dataStr,
+            tipo: `${template.nome} - ${etapa.nome_etapa}`,
+            etapa_ordem: etapa.ordem,
+            parent_id: parentId
+          })
+          .select('id')
+          .single();
+          
+        if (errSub) throw errSub;
+        parentId = dSub.id;
+        dataAnterior = dataEtapa;
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error adding protocol agenda: ", e);
+      return { success: false, message: e.message || 'Falha ao criar protocolo em lote.' };
+    }
+  }, [supabase, selectedEmpresaId]);
+
   const fetchBloqueios = useCallback(async (medicoId?: string) => {
     if (!selectedEmpresaId) return [];
     try {
@@ -295,12 +412,73 @@ export function useAgenda() {
         payload.local = agendaData.local;
       }
 
+      const { data: oldAgenda } = await supabase
+        .from('pet_agenda')
+        .select('grupo_id, template_id, data_agendamento, etapa_ordem')
+        .eq('id', id)
+        .single();
+
       const { error: updateError } = await supabase
         .from('pet_agenda')
         .update(payload)
         .eq('id', id);
 
       if (updateError) throw updateError;
+
+      // --- EFEITO DOMINÓ (CASCATA) ---
+      // Se a data mudou e faz parte de um protocolo (grupo_id existe)
+      if (oldAgenda && oldAgenda.grupo_id && oldAgenda.template_id && oldAgenda.data_agendamento !== agendaData.dataAgendamento) {
+        
+        const { data: template } = await supabase
+          .from('pet_agenda_templates')
+          .select(`*, etapas:pet_agenda_template_etapas(*)`)
+          .eq('id', oldAgenda.template_id)
+          .single();
+          
+        if (template && template.etapas) {
+          const etapas = template.etapas.sort((a: any, b: any) => a.ordem - b.ordem);
+          
+          const addDays = (date: Date, days: number, skipWeekends: boolean) => {
+            let d = new Date(date);
+            let added = 0;
+            while (added < days) {
+              d.setDate(d.getDate() + 1);
+              if (skipWeekends) {
+                if (d.getDay() !== 0 && d.getDay() !== 6) {
+                  added++;
+                }
+              } else {
+                added++;
+              }
+            }
+            return d;
+          };
+
+          // Busca todos os agendamentos subsequentes deste grupo (maior ordem)
+          const { data: subsequentAgendas } = await supabase
+            .from('pet_agenda')
+            .select('id, etapa_ordem')
+            .eq('grupo_id', oldAgenda.grupo_id)
+            .gt('etapa_ordem', oldAgenda.etapa_ordem)
+            .order('etapa_ordem', { ascending: true });
+
+          if (subsequentAgendas && subsequentAgendas.length > 0) {
+            let currentRefDate = new Date(agendaData.dataAgendamento);
+            const timePart = agendaData.dataAgendamento.includes('T') ? agendaData.dataAgendamento.split('T')[1] : '00:00';
+
+            for (const sub of subsequentAgendas) {
+              const stepConf = etapas.find((e: any) => e.ordem === sub.etapa_ordem);
+              if (stepConf) {
+                const nextDate = addDays(currentRefDate, stepConf.dias_apos_anterior, template.pular_finais_de_semana);
+                const nextDateStr = nextDate.toISOString().split('T')[0] + 'T' + timePart;
+
+                await supabase.from('pet_agenda').update({ data_agendamento: nextDateStr }).eq('id', sub.id);
+                currentRefDate = nextDate;
+              }
+            }
+          }
+        }
+      }
 
       return { success: true };
     } catch (e: any) {
@@ -396,6 +574,7 @@ export function useAgenda() {
     error,
     fetchAgenda,
     addAgenda,
+    addAgendaComProtocolo,
     addAgendaBloqueio,
     fetchBloqueios,
     deleteAgendaBloqueio,

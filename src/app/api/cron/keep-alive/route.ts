@@ -12,20 +12,20 @@ export async function GET() {
     }
 
     const timestamp = Date.now();
-    const response = await fetch(`${supabaseUrl}/rest/v1/?_t=${timestamp}`, {
+    const response = await fetch(${supabaseUrl}/rest/v1/?_t=, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
+        'Authorization': Bearer 
       },
       cache: 'no-store'
     });
 
-    if (!response.ok) {
-      throw new Error(`Supabase ping failed: ${response.statusText}`);
+    if (!response.ok && response.status !== 401) {
+      throw new Error(Supabase ping failed:  );
     }
 
-    return NextResponse.json({ success: true, timestamp }, { status: 200 });
+    return NextResponse.json({ success: true, timestamp, status: response.status }, { status: 200 });
   } catch (error: any) {
     console.error('Keep-alive error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -36,6 +36,9 @@ import autoTable from 'jspdf-autotable';
 import { useAgenda } from '@/hooks/use-agenda';
 import { useVeterinarios } from '@/hooks/use-veterinarios';
 import { useToast } from '@/hooks/use-toast';
+import { useSession } from '@/context/session-context';
+import { useAgendaTemplates } from '@/hooks/use-agenda-templates';
+import { ProtocolosTab } from '../admin/protocolos-tab';
 import { PageTitle } from '@/components/layout/page-title';
 import { TattooScannerModal } from '@/components/tattoo-scanner-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -69,6 +72,7 @@ export default function AgendaPage() {
     error: agendaError,
     fetchAgenda, 
     addAgenda, 
+    addAgendaComProtocolo,
     addAgendaBloqueio,
     fetchBloqueios,
     deleteAgendaBloqueio,
@@ -79,6 +83,17 @@ export default function AgendaPage() {
   } = useAgenda();
   
   const { veterinarios, isLoaded: vetsLoaded } = useVeterinarios();
+
+  const { user } = useSession();
+  const canManageProtocols = user?.status === 'Master' || user?.status === 'Administrador' || user?.status === 'Administrador Auxiliar';
+  const { templates, fetchTemplates: fetchAgendaTemplates } = useAgendaTemplates();
+  const [isProtocolosModalOpen, setIsProtocolosModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isProtocolosModalOpen) {
+      fetchAgendaTemplates();
+    }
+  }, [fetchAgendaTemplates, isProtocolosModalOpen]);
 
   // State variables
   const [activeTab, setActiveTab] = useState('diaria');
@@ -110,9 +125,19 @@ export default function AgendaPage() {
   const [formMedicoId, setFormMedicoId] = useState('');
   const [formDate, setFormDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [formTime, setFormTime] = useState('09:00');
-  const [formTipo, setFormTipo] = useState<'Consulta' | 'Retorno' | 'Exame' | 'Cirurgia'>('Consulta');
+  const [formTipo, setFormTipo] = useState<string>('Consulta');
   const [formLocal, setFormLocal] = useState('');
   const [formTutorCpf, setFormTutorCpf] = useState('');
+  
+  useEffect(() => {
+    if (formTipo.startsWith('PROTOCOL:')) {
+      const templateId = formTipo.split(':')[1];
+      const exists = templates.some(t => t.id === templateId);
+      if (!exists && templates.length >= 0) {
+        setFormTipo('Consulta');
+      }
+    }
+  }, [templates, formTipo]);
   const [formTutorNome, setFormTutorNome] = useState('');
   const [formPetNome, setFormPetNome] = useState('');
   const [formTutorTelefone, setFormTutorTelefone] = useState('');
@@ -306,7 +331,7 @@ export default function AgendaPage() {
     // Combine date and time
     const dateTimeIso = new Date(`${formDate}T${formTime}:00`).toISOString();
 
-    const result = await addAgenda({
+    const payload = {
       medicoId: formMedicoId,
       dataAgendamento: dateTimeIso,
       petId: foundPet ? foundPet.id : null,
@@ -317,12 +342,20 @@ export default function AgendaPage() {
       tipo: formTipo,
       local: formLocal,
       fotoUrl: formFotoUrl
-    });
+    };
+
+    let result;
+    if (formTipo.startsWith('PROTOCOL:')) {
+      const templateId = formTipo.split(':')[1];
+      result = await addAgendaComProtocolo(payload, templateId);
+    } else {
+      result = await addAgenda(payload as any);
+    }
 
     if (result.success) {
       toast({
         title: "Agendamento realizado!",
-        description: "A consulta foi agendada com sucesso."
+        description: "A consulta/protocolo foi agendada com sucesso."
       });
       // Reset form
       setFormMedicoId('');
@@ -781,12 +814,19 @@ export default function AgendaPage() {
     <>
       <div className="print:hidden">
         <PageTitle title="Agenda de Atendimentos" description="Gerencie a recepção, agendamentos de veterinários e a chegada de pacientes.">
-          <Link href="/" passHref>
-            <Button variant="outline">
-              <Undo2 className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            {canManageProtocols && (
+              <Button variant="secondary" onClick={() => setIsProtocolosModalOpen(true)}>
+                Configurar Protocolos
+              </Button>
+            )}
+            <Link href="/" passHref>
+              <Button variant="outline">
+                <Undo2 className="mr-2 h-4 w-4" />
+                Voltar
+              </Button>
+            </Link>
+          </div>
         </PageTitle>
       </div>
 
@@ -1578,6 +1618,16 @@ export default function AgendaPage() {
                           <SelectItem value="Retorno">Retorno</SelectItem>
                           <SelectItem value="Exame">Exame</SelectItem>
                           <SelectItem value="Cirurgia">Cirurgia</SelectItem>
+                          {templates && templates.length > 0 && (
+                            <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground mt-2 border-t">
+                              Protocolos em Cascata
+                            </div>
+                          )}
+                          {templates && templates.map(t => (
+                            <SelectItem key={t.id} value={`PROTOCOL:${t.id}`} className="pl-6 font-medium text-indigo-700">
+                              ⚡ {t.nome}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1917,18 +1967,22 @@ export default function AgendaPage() {
 
               <div className="space-y-2">
                 <span className="text-sm font-medium text-muted-foreground">Tipo:*</span>
-                <Select value={editTipo} onValueChange={(val: any) => setEditTipo(val)}>
-                  <SelectTrigger className="shadow-sm">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Consulta">Consulta</SelectItem>
-                    <SelectItem value="Retorno">Retorno</SelectItem>
-                    <SelectItem value="Exame">Exame</SelectItem>
-                    <SelectItem value="Cirurgia">Cirurgia</SelectItem>
-                    <SelectItem value="Bloqueado" className="text-muted-foreground">Bloqueio de Agenda</SelectItem>
-                  </SelectContent>
-                </Select>
+                {['Consulta', 'Retorno', 'Exame', 'Cirurgia', 'Bloqueado'].includes(editTipo) ? (
+                  <Select value={editTipo} onValueChange={(val: any) => setEditTipo(val)}>
+                    <SelectTrigger className="shadow-sm">
+                      <SelectValue placeholder="Tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Consulta">Consulta</SelectItem>
+                      <SelectItem value="Retorno">Retorno</SelectItem>
+                      <SelectItem value="Exame">Exame</SelectItem>
+                      <SelectItem value="Cirurgia">Cirurgia</SelectItem>
+                      <SelectItem value="Bloqueado" className="text-muted-foreground">Bloqueio de Agenda</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={editTipo} disabled className="shadow-sm bg-muted/50 text-muted-foreground cursor-not-allowed" />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -2160,6 +2214,18 @@ export default function AgendaPage() {
           }
         }} 
       />
+
+      {/* DIALOG DE PROTOCOLOS (CONFIGURAÇÃO) */}
+      <Dialog open={isProtocolosModalOpen} onOpenChange={setIsProtocolosModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-card">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Configurar Protocolos</DialogTitle>
+          </DialogHeader>
+          <div className="p-1">
+            <ProtocolosTab />
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
