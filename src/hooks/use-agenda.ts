@@ -203,7 +203,7 @@ export function useAgenda() {
       fotoUrl?: string | null;
     },
     templateId: string
-  ): Promise<{ success: boolean; message?: string }> => {
+  ): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       if (!selectedEmpresaId) throw new Error('Clínica não selecionada.');
       const { data: { user } } = await supabase.auth.getUser();
@@ -337,7 +337,7 @@ export function useAgenda() {
     horaInicio: string | null;
     horaFim: string | null;
     local: string | null;
-  }): Promise<{ success: boolean; message?: string }> => {
+  }): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       if (!selectedEmpresaId) return { success: false, message: 'Clínica não selecionada' };
       
@@ -361,7 +361,7 @@ export function useAgenda() {
     }
   }, [supabase, selectedEmpresaId]);
 
-  const deleteAgendaBloqueio = useCallback(async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const deleteAgendaBloqueio = useCallback(async (id: string): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       const { error: deleteError } = await supabase
         .from('pet_agenda_bloqueios')
@@ -487,7 +487,7 @@ export function useAgenda() {
     }
   }, [supabase]);
 
-  const updateAgendaStatus = useCallback(async (id: string, status: 'Agendado' | 'Cancelado' | 'Realizado'): Promise<{ success: boolean; message?: string }> => {
+  const updateAgendaStatus = useCallback(async (id: string, status: 'Agendado' | 'Cancelado' | 'Realizado'): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       const { error: updateError } = await supabase
         .from('pet_agenda')
@@ -503,7 +503,7 @@ export function useAgenda() {
     }
   }, [supabase]);
 
-  const deleteAgenda = useCallback(async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const deleteAgenda = useCallback(async (id: string): Promise<{ success: boolean; message?: string; isBlocked?: boolean }> => {
     try {
       const { error: deleteError } = await supabase
         .from('pet_agenda')
