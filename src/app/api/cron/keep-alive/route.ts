@@ -1,33 +1,23 @@
-﻿import { NextResponse } from 'next/server';
-
-export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Supabase credentials missing' }, { status: 500 });
-    }
-
-    const timestamp = Date.now();
-    const response = await fetch(`${supabaseUrl}/rest/v1/?_t=${timestamp}`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
+    return NextResponse.json(
+      { 
+        status: 'ok', 
+        message: 'Keep-alive executado com sucesso',
+        timestamp: new Date().toISOString() 
       },
-      cache: 'no-store'
-    });
-
-    if (!response.ok && response.status !== 401) {
-      throw new Error(`Supabase ping failed: ${response.status} ${response.statusText}`);
-    }
-
-    return NextResponse.json({ success: true, timestamp, status: response.status }, { status: 200 });
-  } catch (error: any) {
-    console.error('Keep-alive error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Erro no endpoint de keep-alive:', error);
+    return NextResponse.json(
+      { 
+        status: 'error', 
+        message: 'Falha ao executar o keep-alive' 
+      },
+      { status: 500 }
+    );
   }
 }
