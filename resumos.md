@@ -1,5 +1,15 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-09-25] - Blindagem RLS (Row Level Security) para Fase de Demonstração
+
+### 🛡️ Proteção de Banco de Dados Simplificada
+- **Configuração de RLS:** Habilitamos o *Row Level Security* (RLS) no banco de dados do Supabase para todas as tabelas iniciadas com `pet_`.
+- **Regra de "Passe Livre" Autenticado:** Adicionada uma política temporária que permite todas as operações (Select, Insert, Update, Delete) unicamente para usuários **autenticados**.
+- **Objetivo (Fase Demo):** Isso protege o banco de dados contra exclusões em massa por scripts anônimos (vandalismo) ou vazamento de dados via API pública, enquanto garante que os testes internos rodem sem gerar erros complexos de permissão.
+- **Validação de Interface:** Confirmamos que todas as restrições visuais e de API baseadas em cargos (ex: "Secretária", "Médico Lite") geridas no código React **continuam em vigor e operacionais**.
+
+---
+
 ## [2026-08-10] - Automação Total do Scanner de Tatuagens e Integração de Prontuário
 
 ### 🔄 Fluxo de Navegação Inteligente (Scanner)
