@@ -432,7 +432,7 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
             <ScanLine className="w-5 h-5 text-blue-500" /> Leitura de Tatuagem
           </h3>
-          <button onClick={closeOcrModal} className="text-slate-400 hover:text-white flex items-center gap-2 font-semibold text-sm bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors">
+          <button onClick={() => closeOcrModal(false)} className="text-slate-400 hover:text-white flex items-center gap-2 font-semibold text-sm bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors">
             <Undo2 className="w-4 h-4" /> Voltar
           </button>
         </div>
