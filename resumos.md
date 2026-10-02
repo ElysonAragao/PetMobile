@@ -1,5 +1,19 @@
 # Resumo de Alterações - PetMobile
 
+## [2026-10-02] - Melhoria na Navegação e UX do Scanner de Tatuagens
+
+### 🧭 Fluxo de Identificação Refinado
+- **Nova Tela de Seleção:** A rota `/scan-pet` foi transformada em um menu de escolha entre "Ler QR Code" e "Ler Tatuagem", substituindo a abertura direta da câmera.
+- **Isolamento da Câmera:** A câmera de QR Code foi movida para uma sub-rota dedicada (`/scan-pet/camera`).
+- **Correção de Botões Voltar:** O fluxo de navegação foi ajustado para que as telas de leitura retornem corretamente para a tela de seleção, e a tela de seleção retorne para o Módulo de Pets, resolvendo loops de navegação.
+
+### 🎙️ Inteligência de Comando de Voz (OCR)
+- **Expansão de Palavras-Chave:** Adicionadas variações como "Tatoo", "Tatu" e "Código" para iniciar a captura limpa da leitura (ignorando lixo sonoro).
+- **Finalização Rápida (Próximo/Finalizar):** Implementados comandos de voz que salvam a leitura atual no histórico e preparam a tela para ler o próximo animal imediatamente (loop contínuo).
+- **Saída Ágil (Sair/Fechar):** O comando "Sair" encerra a câmera e abre automaticamente o "Histórico de Testes", permitindo lançar Movimentação, Ficha ou Prontuário direto do resultado.
+
+---
+
 ## [2026-09-25] - Blindagem RLS (Row Level Security) para Fase de Demonstração
 
 ### 🛡️ Proteção de Banco de Dados Simplificada

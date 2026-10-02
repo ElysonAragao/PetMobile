@@ -4,7 +4,7 @@ import { createWorker } from 'tesseract.js';
 
 interface TattooScannerModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (openHistory?: boolean) => void;
   onConfirm: (tatuagemId: string, fotoBase64: string | null, ocrOriginal: string | null) => void;
 }
 
@@ -310,14 +310,14 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
       // Remove a palavra "LETRA" caso o usuário fale "Letra E..."
       transcriptUpper = transcriptUpper.replace(/\bLETRA\b/g, '');
       
-      // LIMPEZA DE RUÍDO: Se a pessoa usar o comando "FALAR" ou "CÓDIGO", 
-      // ignoramos todo o "lixo" capturado antes dessa palavra e pegamos só o que vem depois.
-      if (transcriptUpper.includes('FALAR')) {
-          const parts = transcriptUpper.split('FALAR');
-          transcriptUpper = parts[parts.length - 1];
-      } else if (transcriptUpper.includes('CODIGO')) {
-          const parts = transcriptUpper.split('CODIGO');
-          transcriptUpper = parts[parts.length - 1];
+      // LIMPEZA DE RUÍDO: Ignorar lixo capturado antes das palavras-chave
+      const noiseWords = ['FALAR', 'CODIGO', 'CÓDIGO', 'TATU', 'TATOO', 'TATTOO'];
+      for (const word of noiseWords) {
+          if (transcriptUpper.includes(word)) {
+              const parts = transcriptUpper.split(word);
+              transcriptUpper = parts[parts.length - 1];
+              break; // Pega o que vem depois da primeira palavra-chave encontrada
+          }
       }
       
       const numberMap: Record<string, string> = {
@@ -333,6 +333,16 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
 
       let spokenCode = transcriptUpper.replace(/[^A-Z0-9]/g, '');
       
+      // Comandos para fechar a rotina (fechar o modal)
+      const exitWords = ['SAIR', 'FECHAR'];
+      for (const word of exitWords) {
+        if (spokenCode.includes(word)) {
+           recognition.stop();
+           closeOcrModal(true); // true indica que deve abrir o histórico
+           return;
+        }
+      }
+
       // Comandos para voltar / refazer
       const restartWords = ['VOLTAR', 'REFAZER', 'NOVAFOTO', 'NOVALEITURA', 'CANCELAR'];
       for (const word of restartWords) {
@@ -345,7 +355,8 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
         }
       }
 
-      const confirmWords = ['CONFIRMAR', 'CONFIRMA', 'SALVAR'];
+      // Comandos para confirmar e prosseguir
+      const confirmWords = ['CONFIRMAR', 'CONFIRMA', 'SALVAR', 'FINALIZAR', 'PROXIMO'];
       let isConfirming = false;
       
       for (const word of confirmWords) {
@@ -405,11 +416,11 @@ export function TattooScannerModal({ isOpen, onClose, onConfirm }: TattooScanner
     setIsWebcamOpen(true);
   };
 
-  const closeOcrModal = () => {
+  const closeOcrModal = (openHistory: boolean = false) => {
     setIsWebcamOpen(false);
     setOcrError(null);
     stopCamera();
-    onClose();
+    onClose(openHistory);
   };
 
   if (!isOpen) return null;

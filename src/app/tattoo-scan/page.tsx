@@ -134,8 +134,8 @@ export default function TattooScanTestPage() {
   return (
     <>
       <PageTitle title="Laboratório de OCR (Tatuagem)" description="Teste o novo motor de OCR do AutoMobile adaptado para o PetMobile.">
-        <Link href="/" passHref>
-          <Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar ao Painel</Button>
+        <Link href="/scan-pet" passHref>
+          <Button variant="outline"><Undo2 className="mr-2 h-4 w-4" />Voltar</Button>
         </Link>
       </PageTitle>
 
@@ -250,7 +250,12 @@ export default function TattooScanTestPage() {
 
       <TattooScannerModal 
         isOpen={isScannerOpen} 
-        onClose={() => setIsScannerOpen(false)} 
+        onClose={(openHistory) => {
+          setIsScannerOpen(false);
+          if (openHistory) {
+             handleOpenHistory();
+          }
+        }} 
         onConfirm={async (tatuagem, fotoUrl, iaResult) => {
           const id = await handleSaveTest(tatuagem, fotoUrl, iaResult);
           setRecentResults(prev => [{ id, tatuagem, fotoUrl, iaResult }, ...prev]);

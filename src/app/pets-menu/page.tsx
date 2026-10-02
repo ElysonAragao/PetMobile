@@ -15,8 +15,8 @@ export default function PetsMenu() {
       icon: <PawPrint className="h-8 w-8 text-primary" />,
     },
     {
-      title: "Leitura de QR Code",
-      description: "Identifique um animal cadastrado usando a câmera.",
+      title: "Leitura QR Code e Tatuagem",
+      description: "Identifique um animal cadastrado usando a câmera ou leitura de tatuagem.",
       href: "/scan-pet",
       icon: <Scan className="h-8 w-8 text-primary" />,
     },
