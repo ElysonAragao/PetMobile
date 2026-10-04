@@ -311,7 +311,7 @@ export default function VeterinariosPage() {
       </PageTitle>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
+        <TabsList className="flex h-12 md:h-10 w-full overflow-x-auto overflow-y-hidden justify-start md:grid md:grid-cols-3 md:w-[600px] px-1 no-scrollbar">
           <TabsTrigger value="list"><Stethoscope className="mr-2 h-4 w-4" />Listar Veterinários</TabsTrigger>
           <TabsTrigger value="register"><PlusCircle className="mr-2 h-4 w-4" />Novo Veterinário</TabsTrigger>
           <TabsTrigger value="modelos"><FileText className="mr-2 h-4 w-4" />Modelos</TabsTrigger>

@@ -860,7 +860,7 @@ export default function AgendaPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full print:hidden">
-        <TabsList className="grid w-full grid-cols-4 md:w-[700px] mb-6">
+        <TabsList className="flex h-12 md:h-10 w-full overflow-x-auto overflow-y-hidden justify-start md:grid md:grid-cols-4 md:w-[700px] mb-6 px-1 no-scrollbar">
           <TabsTrigger value="diaria">
             <CalendarDays className="w-4 h-4 mr-2" />
             Agenda Diária

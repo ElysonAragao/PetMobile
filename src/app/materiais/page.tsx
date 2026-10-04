@@ -472,7 +472,7 @@ export default function MateriaisPage() {
       </PageTitle>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+        <TabsList className="flex h-12 md:h-10 w-full overflow-x-auto overflow-y-hidden justify-start md:grid md:grid-cols-2 md:w-[400px] px-1 no-scrollbar">
           <TabsTrigger value="list"><Box className="mr-2 h-4 w-4" />Listar Materiais</TabsTrigger>
           <TabsTrigger value="register" onClick={handleRegisterClick}>
             <PlusCircle className="mr-2 h-4 w-4" />Novo Material

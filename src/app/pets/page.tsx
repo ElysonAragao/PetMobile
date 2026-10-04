@@ -1283,7 +1283,7 @@ export default function PetsPage() {
       </PageTitle>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
+        <TabsList className="flex h-12 md:h-10 w-full overflow-x-auto overflow-y-hidden justify-start md:grid md:grid-cols-3 md:w-[600px] px-1 no-scrollbar">
           <TabsTrigger value="list">Listar Pets</TabsTrigger>
           <TabsTrigger value="register">Novo Pet</TabsTrigger>
           <TabsTrigger value="especies">Gerenciar Espécies</TabsTrigger>
