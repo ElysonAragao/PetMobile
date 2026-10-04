@@ -26,7 +26,8 @@ function normalizeUser(u: any): Usuario | null {
     let status = u.status;
     
     // Normalização agressiva para nova estrutura de UserRole
-    if (status === 'Médico' || status === 'Medico' || status === 'medico' || status === 'MedicoVet' || status === 'MedicoVet Geral' || status === 'Veterinário Geral') status = 'Veterinário';
+    if (status === 'Médico' || status === 'Medico' || status === 'medico' || status === 'Veterinário' || status === 'Veterinario') status = 'MedicoVet';
+    if (status === 'Veterinário Geral' || status === 'Veterinario Geral') status = 'MedicoVet Geral';
     if (status === 'Secretaria') status = 'Secretária';
     if (status === 'Secretaria Geral') status = 'Secretária Geral';
     if (status === 'Leitor Geral') status = 'Leitor';

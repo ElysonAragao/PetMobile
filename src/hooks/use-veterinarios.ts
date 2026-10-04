@@ -28,6 +28,7 @@ async function getNextVeterinarioCode(supabase: any): Promise<string> {
         .from('pet_usuarios')
         .select('codigo')
         .in('status', ['Veterinário', 'Veterinário Geral', 'MedicoVet', 'MedicoVet Geral'])
+        .not('codigo', 'is', null)
         .order('codigo', { ascending: false })
         .limit(1);
 

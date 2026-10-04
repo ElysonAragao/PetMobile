@@ -53,6 +53,7 @@ import { useExams } from '@/hooks/use-exams';
 import { useSession } from '@/context/session-context';
 import { useMovement } from '@/hooks/use-movement';
 import { useProntuarios } from '@/hooks/use-prontuarios';
+import { useVeterinarios } from '@/hooks/use-veterinarios';
 import { exportToCSV, exportToPDF, exportToTXT } from '@/lib/export-utils';
 import { useModelos } from '@/hooks/use-modelos';
 import { useFaturamento } from '@/hooks/use-faturamento';
@@ -375,6 +376,10 @@ function GuiaContent({ onBack }: { onBack: () => void }) {
     React.useEffect(() => {
         if (searchParams.get('reset') || searchParams.get('focus') === 'newGuide') {
             resetForm(true); 
+            router.replace('/movement?mode=guia', { scroll: false });
+        }
+        if (searchParams.get('openReport') === 'true') {
+            setIsReportOpen(true);
             router.replace('/movement?mode=guia', { scroll: false });
         }
     }, [searchParams, router]);
@@ -1055,6 +1060,7 @@ function ProntuarioSelectionContent({ onBack }: { onBack: () => void }) {
 
 function MovementContainer() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const [activeMode, setActiveMode] = React.useState<'menu' | 'guia' | 'prontuario'>('menu');
 
     React.useEffect(() => {
@@ -1067,9 +1073,16 @@ function MovementContainer() {
     }, [searchParams]);
 
     const { user } = useSession();
+    const { veterinarios } = useVeterinarios();
 
     // Proteção rigorosa conforme regra de negócios
-    const canAccessProntuario = user?.status === 'MedicoVet' || user?.status === 'Administrador' || user?.status === 'Master' || user?.status === 'MedicoVet Geral';
+    const isMasterOrAdmin = user?.status === 'Master' || user?.status === 'Administrador' || user?.status === 'Administrador Auxiliar';
+    
+    const currentVet = veterinarios.find(v => v.id === user?.id);
+    const hasValidDate = currentVet?.validade_prontuario ? new Date(currentVet.validade_prontuario + 'T23:59:59') >= new Date() : true;
+    const hasProntuarioLivre = currentVet ? (currentVet.prontuario_liberado && hasValidDate) : false;
+
+    const canAccessProntuario = isMasterOrAdmin || ((user?.status === 'MedicoVet' || user?.status === 'MedicoVet Geral') && hasProntuarioLivre);
 
     if (activeMode === 'guia') {
         return <GuiaContent onBack={() => setActiveMode('menu')} />;
@@ -1090,8 +1103,8 @@ function MovementContainer() {
                 </Link>
             </PageTitle>
 
-            <div className="max-w-4xl mx-auto mt-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="max-w-6xl mx-auto mt-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <Card 
                     className="cursor-pointer hover:border-primary hover:shadow-md transition-all group overflow-hidden relative"
                     onClick={() => setActiveMode('guia')}
@@ -1115,33 +1128,54 @@ function MovementContainer() {
                     </CardFooter>
                 </Card>
 
+                {canAccessProntuario && (
+                    <Card 
+                        className="cursor-pointer hover:border-blue-500 hover:shadow-md border-blue-100 transition-all group overflow-hidden relative"
+                        onClick={() => setActiveMode('prontuario')}
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <FileText className="w-32 h-32" />
+                        </div>
+                        <CardHeader>
+                            <div className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 bg-blue-500/10 text-blue-600">
+                                <Stethoscope className="w-6 h-6" />
+                            </div>
+                            <CardTitle className="text-xl">Acesso ao Prontuário</CardTitle>
+                            <CardDescription className="text-sm">
+                               Registre evoluções, anamneses e emita receitas/atestados.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardFooter>
+                            <span className="text-blue-600 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                                Acessar Registros Corporativos <ArrowRight className="w-4 h-4" />
+                            </span>
+                        </CardFooter>
+                    </Card>
+                )}
+
                 <Card 
-                    className={`cursor-pointer transition-all group overflow-hidden relative ${canAccessProntuario ? 'hover:border-blue-500 hover:shadow-md border-blue-100' : 'opacity-60 grayscale cursor-not-allowed border-slate-200'}`}
-                    onClick={() => {
-                        if (canAccessProntuario) setActiveMode('prontuario');
-                    }}
+                    className="cursor-pointer hover:border-orange-500 hover:shadow-md border-orange-100 transition-all group overflow-hidden relative"
+                    onClick={() => router.push('/movement?mode=guia&openReport=true')}
                 >
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <FileText className="w-32 h-32" />
+                        <Printer className="w-32 h-32" />
                     </div>
                     <CardHeader>
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${canAccessProntuario ? 'bg-blue-500/10 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                            <Stethoscope className="w-6 h-6" />
+                        <div className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 bg-orange-500/10 text-orange-600">
+                            <FileText className="w-6 h-6" />
                         </div>
-                        <CardTitle className="text-xl">Acesso ao Prontuário</CardTitle>
+                        <CardTitle className="text-xl">Relatórios</CardTitle>
                         <CardDescription className="text-sm">
-                           Registre evoluções, anamneses e emita receitas/atestados.
-                           {(!canAccessProntuario) && (
-                               <Badge variant="destructive" className="mt-4 block w-fit">Acesso Restrito</Badge>
-                           )}
+                           Visualize relatórios de movimentação referentes às suas consultas e guias emitidas.
                         </CardDescription>
                     </CardHeader>
                     <CardFooter>
-                        <span className={`${canAccessProntuario ? 'text-blue-600' : 'text-slate-400'} font-medium flex items-center gap-1 group-hover:gap-2 transition-all`}>
-                            {canAccessProntuario ? 'Acessar Registros Corporativos' : 'Requer Perfil Médico'} <ArrowRight className="w-4 h-4" />
+                        <span className="text-orange-600 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                            Ver Relatórios <ArrowRight className="w-4 h-4" />
                         </span>
                     </CardFooter>
                 </Card>
+
             </div>
         </div>
         </>

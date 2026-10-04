@@ -11,10 +11,12 @@ import { ArrowRight, FileText, PawPrint, Stethoscope, HeartPulse, UserCog, Send,
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/context/session-context';
+import { useVeterinarios } from '@/hooks/use-veterinarios';
 import { Suspense } from 'react';
 
 function HomeContent() {
   const { user } = useSession();
+  const { veterinarios } = useVeterinarios();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = React.useState(false);
@@ -146,8 +148,22 @@ function HomeContent() {
     }
   ];
 
+  const currentVet = veterinarios.find(v => v.id === user?.id);
+  const hasValidDate = currentVet?.validade_prontuario ? new Date(currentVet.validade_prontuario + 'T23:59:59') >= new Date() : true;
+  const hasProntuarioLivre = currentVet ? (currentVet.prontuario_liberado && hasValidDate) : false;
+  const isLiteVet = (user?.status === 'MedicoVet' || user?.status === 'MedicoVet Geral') && !hasProntuarioLivre;
+
   const userRole = user?.status as UserRole | undefined;
-  const visibleFeatures = features.filter(feature => userRole && feature.roles.includes(userRole));
+  const visibleFeatures = features.filter(feature => {
+    if (!userRole || !feature.roles.includes(userRole)) return false;
+    
+    // Lite Vet restrictions: can only see Movement
+    if (isLiteVet && feature.href !== '/movement') {
+      return false;
+    }
+    
+    return true;
+  });
 
   return (
     <div className="flex flex-col items-center text-center p-4">

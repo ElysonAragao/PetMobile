@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/context/session-context';
 import { Loader2, RefreshCw, Smartphone, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useVeterinarios } from '@/hooks/use-veterinarios';
 
 const publicPaths = ['/login', '/setup'];
 
@@ -12,11 +13,13 @@ const roleRoutes: Record<string, string[]> = {
     'Master': ['*'],
     'Administrador': ['*'],
     'Administrador Auxiliar': ['*'],
-    'Veterinário': ['/movement', '/pets', '/pets-menu', '/print', '/agenda'],
-    'Secretária': ['/pets', '/pets-menu', '/print', '/agenda'],
-    'Secretária Geral': ['/pets', '/pets-menu', '/print', '/agenda'],
-    'Leitor': ['/scan', '/print'],
-    'Relatórios': ['/leituras', '/print'],
+    'Supervisor': ['*'],
+    'MedicoVet': ['/movement', '/pets', '/pets-menu', '/print', '/agenda', '/orcamento', '/tattoo-scan', '/cameras'],
+    'MedicoVet Geral': ['/movement', '/pets', '/pets-menu', '/print', '/agenda', '/orcamento', '/tattoo-scan', '/cameras'],
+    'Secretária': ['/pets', '/pets-menu', '/print', '/agenda', '/orcamento'],
+    'Secretária Geral': ['/pets', '/pets-menu', '/print', '/agenda', '/orcamento'],
+    'Leitor': ['/scan', '/print', '/tattoo-scan', '/cameras'],
+    'Relatórios': ['/leituras', '/print', '/reports'],
 };
 
 function isRouteAllowed(userStatus: string | undefined, pathname: string): boolean {
@@ -36,6 +39,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const isPublic = publicPaths.includes(pathname) || pathname.startsWith('/print');
 
+    const { veterinarios, isLoaded: vetsLoaded } = useVeterinarios();
+
     // Temporizador de segurança para falhas de rede no mobile
     React.useEffect(() => {
         let timer: NodeJS.Timeout;
@@ -54,6 +59,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
         console.log(`AuthGuard - Estado: auth=${isAuthenticated}, path=${pathname}, userRole=${user?.status}`);
 
+        const currentVet = veterinarios.find(v => v.id === user?.id);
+        const hasValidDate = currentVet?.validade_prontuario ? new Date(currentVet.validade_prontuario + 'T23:59:59') >= new Date() : true;
+        const hasProntuarioLivre = currentVet ? (currentVet.prontuario_liberado && hasValidDate) : false;
+        const isLiteVet = (user?.status === 'MedicoVet' || user?.status === 'MedicoVet Geral') && !hasProntuarioLivre;
+
         if (isAuthenticated && isPublic && !pathname.startsWith('/print')) {
             console.log("Usuário autenticado em rota pública. Redirecionando para /...");
             router.replace('/');
@@ -66,8 +76,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         } else if (isAuthenticated && user && !isPublic && !isRouteAllowed(user.status, pathname)) {
             console.log(`Permissão negada para o perfil ${user.status} na rota ${pathname}. Redirecionando para /...`);
             router.replace('/');
+        } else if (isAuthenticated && user && !isPublic && isLiteVet && pathname !== '/' && !pathname.startsWith('/movement') && !pathname.startsWith('/print')) {
+            console.log(`Lite Vet bloqueado na rota ${pathname}. Redirecionando para /...`);
+            router.replace('/');
         }
-    }, [isLoading, isAuthenticated, pathname, router, isPublic, user]);
+    }, [isLoading, isAuthenticated, pathname, router, isPublic, user, veterinarios]);
 
     if (pathname.startsWith('/print')) {
         return <>{children}</>;
