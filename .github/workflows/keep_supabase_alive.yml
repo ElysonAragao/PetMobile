@@ -2,17 +2,30 @@ name: Keep Supabase Alive
 
 on:
   schedule:
-    # Roda às 00:00 (UTC) a cada 4 dias
-    - cron: '0 0 */4 * *'
+    # Executa a cada 2 dias às 03:00 UTC (garante ampla margem contra a pausa de 7 dias)
+    - cron: '0 3 */2 * *'
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase API
+      - name: Ping Supabase PostgreSQL via REST
         run: |
-          TIMESTAMP=$(date +%s)
-          curl -s -o /dev/null -w "HTTP Status: %{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/?_t=$TIMESTAMP" \
-          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
+          # Consulta uma tabela existente (pet_empresas) para forçar leitura real no PostgreSQL
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_empresas?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}")
+          echo "Supabase REST Status: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Tentando tabela alternativa pet_especies..."
+            STATUS_ALT=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_especies?select=id&limit=1" \
+              -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}")
+            echo "Supabase REST Status (pet_especies): $STATUS_ALT"
+            if [ "$STATUS_ALT" -ne 200 ]; then
+              echo "Falha ao consultar o Supabase! Status: $STATUS_ALT"
+              exit 1
+            fi
+          fi
+          echo "Sucesso: atividade registrada com sucesso no PostgreSQL do Supabase!"

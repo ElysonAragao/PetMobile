@@ -311,6 +311,25 @@ Implementamos um sistema de IDs altamente escalável e autoexplicativo:
 ## [2026-09-14] - Auditoria de Inatividade do Supabase (Cron Jobs)
 
 ### ⏱️ Cron Jobs e Keep-Alive
-- **Vercel Cron Jobs**: Configuração de ercel.json para disparar rotas de forma agendada no Vercel (0 0 * * *). Implementado para os projetos PetMobile, PacienteMobile e AutoMobile.
+- **Vercel Cron Jobs**: Configuração de vercel.json para disparar rotas de forma agendada no Vercel (0 0 * * *). Implementado para os projetos PetMobile, PacienteMobile e AutoMobile.
 - **Rota API Keep-Alive**: Criada rota /api/cron/keep-alive/route.ts que executa um 'ping' de leitura no Supabase via REST (/rest/v1/?_t=...) utilizando as credenciais nativas de ambiente. Isso registra atividade diária de leitura no banco, impedindo a pausa dos projetos por inatividade imposta pelos planos gratuitos.
-- **Tratamento de BOM (UTF-8)**: Corrigido o problema de BOM (Byte Order Mark) invisível gerado ao manipular arquivos no Windows, que tornava o arquivo ercel.json inválido durante o build do Vercel.
+- **Tratamento de BOM (UTF-8)**: Corrigido o problema de BOM (Byte Order Mark) invisível gerado ao manipular arquivos no Windows, que tornava o arquivo vercel.json inválido durante o build do Vercel.
+
+---
+
+## [2026-10-13] - Correção Crítica do Keep-Alive (Prevenção de Pausa Supabase)
+
+### 🚨 Diagnóstico de Inatividade do Supabase
+- **Causa Raiz Identificada**: A rota /api/cron/keep-alive estava tentando consultar a tabela companies (herdada de outro projeto), que **não existe** no banco de dados do PetMobile (onde as tabelas usam o prefixo pet_, como pet_empresas e pet_especies). A consulta retornava erro HTTP 500 (PGRST205 - Not Found), sendo rejeitada pelo cache do PostgREST sem registrar nenhuma atividade real no PostgreSQL.
+- **Inatividade no GitHub Actions**: O workflow .github/workflows/keep_supabase_alive.yml fazia um curl na rota raiz /rest/v1/?_t=..., sintaxe inválida para o PostgREST (gerava erro 400/401 sem tocar no banco de dados Postgres).
+- **Período de Inatividade**: Entre 21/09 e 10/10 a rota foi deixada sem chamadas ao Supabase, e a partir de 10/10 passou a falhar por causa do nome incorreto da tabela. Com isso, o Supabase atingiu 7 dias sem atividade no banco e enviou o e-mail de alerta de suspensão.
+
+### 🛠️ Correções Implementadas
+- **Ajuste da Rota Vercel (src/app/api/cron/keep-alive/route.ts)**:
+  - Atualizada para consultar a tabela real pet_empresas (com fallback para pet_especies).
+  - Adicionado export const dynamic = 'force-dynamic' para evitar cache estático no Next.js.
+  - Implementada tolerância a credenciais: usa SUPABASE_SERVICE_ROLE_KEY se disponível ou faz fallback para NEXT_PUBLIC_SUPABASE_ANON_KEY.
+- **Ajuste do GitHub Actions (.github/workflows/keep_supabase_alive.yml)**:
+  - Atualizado para consultar endpoints reais (/rest/v1/pet_empresas?select=id&limit=1 e fallback pet_especies).
+  - Frequência ajustada para a cada 2 dias (ampla margem de segurança contra a janela de 7 dias do Supabase).
+- **Validação Imediata**: Teste executado com sucesso localmente contra a instância em produção do Supabase, registrando atividade com status HTTP 200 e reativando o timer de inatividade.
