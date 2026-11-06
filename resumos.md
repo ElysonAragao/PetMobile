@@ -333,3 +333,21 @@ Implementamos um sistema de IDs altamente escalável e autoexplicativo:
   - Atualizado para consultar endpoints reais (/rest/v1/pet_empresas?select=id&limit=1 e fallback pet_especies).
   - Frequência ajustada para a cada 2 dias (ampla margem de segurança contra a janela de 7 dias do Supabase).
 - **Validação Imediata**: Teste executado com sucesso localmente contra a instância em produção do Supabase, registrando atividade com status HTTP 200 e reativando o timer de inatividade.
+
+---
+
+## [2026-11-06] - Blindagem Definitiva do Keep-Alive contra Falso Positivo de RLS
+
+### 🚨 Diagnóstico
+- **Falso Positivo de RLS no GitHub Actions**: A tabela `pet_empresas` possui RLS restrito a usuários autenticados (`authenticated`). Como o secret `SUPABASE_KEY` no GitHub Actions utiliza a chave pública (`ANON_KEY`), a consulta retornava `HTTP 200` com array vazio `[]` (0 linhas lidas). O script só acionava o fallback `pet_especies` se `STATUS != 200`, fazendo com que nunca lesse registros reais no banco.
+- **Limitação do Agendador Hobby da Vercel**: O agendador interno do plano gratuito da Vercel não garante execução diária quando há múltiplos projetos na mesma conta.
+
+### 🛠️ Solução Implementada
+- **Tripla Camada no GitHub Actions (`.github/workflows/keep_supabase_alive.yml`)**:
+  1. Dispara externamente a rota `https://pet-mobile.vercel.app/api/cron/keep-alive` (que roda autenticada com a `SUPABASE_SERVICE_ROLE_KEY` da Vercel, ignorando qualquer RLS).
+  2. Consulta diretamente `pet_especies` (leitura pública liberada no RLS) com parâmetro anti-cache `&_t=$TIMESTAMP`, validando que o corpo retornado **não é vazio (`[]`)**.
+  3. Executa a função RPC `is_master` diretamente no motor PostgreSQL via `POST /rest/v1/rpc/is_master`.
+- **Rota Vercel (`src/app/api/cron/keep-alive/route.ts`)**:
+  - Passou a consultar simultaneamente `pet_especies`, `pet_empresas` e executar a RPC `is_master` no PostgreSQL com headers estritos `no-store, no-cache`.
+- **Padronização nos Demais Projetos**:
+  - Atualizados também os workflows `.github/workflows/keep_supabase_alive.yml` do `AutoMobile` e `PacienteMobile` (que ainda apontavam para `/rest/v1/` raiz retornando `HTTP 401`) para consultarem tabelas reais (`empresas` e `usuarios`) a cada 2 dias validando retorno de linhas.
