@@ -23,7 +23,7 @@ jobs:
           echo "Vercel Keep-Alive Body: $VERCEL_BODY"
 
           echo "2) Consultando tabela pet_especies diretamente no Supabase (retorna registros reais mesmo com ANON_KEY)..."
-          REST_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_especies?select=id&limit=1&_t=$TIMESTAMP" \
+          REST_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/pet_especies?select=id&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}" \
             -H "Cache-Control: no-cache")
